@@ -37,19 +37,19 @@ what is playing. Opening an item never starts it automatically.
 
 ## Global keys
 
-| Key | Behavior |
-| --- | --- |
-| `↑` / `k` | Move selection up |
-| `↓` / `j` | Move selection down |
-| `Enter` | Open selected destination |
-| `p` | Play selected playable item |
-| `Space` | Toggle play and pause |
-| `a` | Add selected playable item to the queue |
-| `/` | Open global search |
-| `n` | Open Now Playing and queue |
-| `Esc` | Go back or close the active overlay |
-| `?` | Show contextual help |
-| `q` | Quit from Home |
+| Key       | Behavior                                |
+| --------- | --------------------------------------- |
+| `↑` / `k` | Move selection up                       |
+| `↓` / `j` | Move selection down                     |
+| `Enter`   | Open selected destination               |
+| `p`       | Play selected playable item             |
+| `Space`   | Toggle play and pause                   |
+| `a`       | Add selected playable item to the queue |
+| `/`       | Open global search                      |
+| `n`       | Open Now Playing and queue              |
+| `Esc`     | Go back or close the active overlay     |
+| `?`       | Show contextual help                    |
+| `q`       | Quit from Home                          |
 
 Keys may be shown or hidden in the guide based on whether their action is valid,
 but their meaning must remain stable throughout the application.
