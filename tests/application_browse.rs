@@ -18,8 +18,8 @@ fn home_opens_the_ordered_listening_intents_without_starting_playback() {
         excerpt,
         [
             " SONGDIAL / MOOD & ACTIVITY",
-            "  LISTENING INTENTS",
-            "  Choose the Listening intent that fits right now.",
+            "  MOOD & ACTIVITY",
+            "  Choose what fits right now.",
             "  > Deep Work                                                 SELECTED",
             "    Focus",
             "    Flow",
@@ -87,6 +87,27 @@ fn selected_listening_intent_match_highlights_its_complete_source_badge() {
     assert_eq!(
         source_backgrounds,
         vec![Color::Rgb(214, 166, 75); "[MORROW]".len()]
+    );
+}
+
+#[test]
+fn mood_and_activity_help_uses_listener_facing_language() {
+    let mut application = Application::new(Viewport::new(80, 24));
+    application.handle_event(Event::Key(Key::Enter));
+    application.handle_event(Event::Key(Key::Char('?')));
+    let chooser_help = lines(&application.render());
+
+    application.handle_event(Event::Key(Key::Char('?')));
+    application.handle_event(Event::Key(Key::Enter));
+    application.handle_event(Event::Key(Key::Char('?')));
+    let direction_help = lines(&application.render());
+
+    assert_eq!(
+        (chooser_help[12].trim_end(), direction_help[12].trim_end(),),
+        (
+            "  Mood & activity: choose what fits with Enter.",
+            "  Open a Station or Playlist with Enter.",
+        )
     );
 }
 
@@ -210,7 +231,7 @@ fn empty_intent_and_playlist_explain_their_deterministic_next_action() {
                 " SONGDIAL / MOOD & ACTIVITY / RESET",
                 "  0 Stations • 0 Playlists",
                 "  Nothing matches Reset in the Demo catalog.",
-                "  Esc returns to Listening intents to choose another direction.",
+                "  Esc returns to Mood & activity to choose another direction.",
                 " NOW PLAYING  Nothing playing",
             ]
             .map(str::to_owned),

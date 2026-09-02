@@ -386,13 +386,8 @@ impl Application {
 
     fn render_listening_intents(&self, buffer: &mut Buffer, base: Style) {
         buffer.set_string(0, 0, " SONGDIAL / MOOD & ACTIVITY", base);
-        buffer.set_string(0, 2, "  LISTENING INTENTS", base);
-        buffer.set_string(
-            0,
-            3,
-            "  Choose the Listening intent that fits right now.",
-            base,
-        );
+        buffer.set_string(0, 2, "  MOOD & ACTIVITY", base);
+        buffer.set_string(0, 3, "  Choose what fits right now.", base);
 
         for (index, intent) in self.catalog.listening_intents().iter().enumerate() {
             let line = if index == self.current.selection {
@@ -449,7 +444,7 @@ impl Application {
             buffer.set_string(
                 0,
                 8,
-                "  Esc returns to Listening intents to choose another direction.",
+                "  Esc returns to Mood & activity to choose another direction.",
                 base,
             );
         } else {
@@ -728,7 +723,7 @@ impl Application {
             Destination::ListeningIntent(intent_id) => self
                 .catalog
                 .listening_intent(intent_id)
-                .map_or("LISTENING INTENT", |intent| intent.name()),
+                .map_or("MOOD & ACTIVITY", |intent| intent.name()),
             Destination::StationDetails { station_id, .. } => self
                 .catalog
                 .station(station_id)
@@ -750,12 +745,8 @@ impl Application {
         buffer.set_string(0, 10, "  Ctrl+C   Quit immediately", base);
         let local_help = match &self.current.destination {
             Destination::Home => "  Home: choose a listening path, then press Enter.",
-            Destination::ListeningIntents => {
-                "  Mood & activity: open a Listening intent with Enter."
-            }
-            Destination::ListeningIntent(_) => {
-                "  Listening intent: inspect a Station or Playlist with Enter."
-            }
+            Destination::ListeningIntents => "  Mood & activity: choose what fits with Enter.",
+            Destination::ListeningIntent(_) => "  Open a Station or Playlist with Enter.",
             Destination::StationDetails { .. } => {
                 "  Station details: Esc returns to the exact prior selection."
             }

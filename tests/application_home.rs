@@ -106,7 +106,7 @@ fn enter_opens_every_home_choice_without_starting_playback() {
         .map(|(index, choice)| {
             let (body, guide) = if index == 0 {
                 (
-                    "  LISTENING INTENTS".to_owned(),
+                    "  MOOD & ACTIVITY".to_owned(),
                     " ↑/k up  ↓/j down  Enter open".to_owned(),
                 )
             } else {
