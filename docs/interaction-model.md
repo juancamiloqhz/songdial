@@ -88,7 +88,11 @@ are outside this milestone.
 
 This Destination shows Listening intents such as Deep Work, Focus, Flow, Calm,
 Energy, and Reset. Opening one reveals its available Stations and Playlists
-along with a short explanation of the intended listening character.
+along with a short explanation of why it fits that choice.
+
+The interface labels this group Mood & activity and uses task language such as
+“Choose what fits right now.” Listening intent remains the internal domain term
+rather than user-facing interface copy.
 
 A Listening intent is Songdial curation, not a Service or Playable item.
 

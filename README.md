@@ -8,10 +8,10 @@ independent of where the music comes from.
 
 Songdial is in pre-alpha. The Rust and Ratatui application opens directly on
 Home and includes its first complete browse journey: Mood & activity leads to
-six Listening intents, matching Stations and Playlists, and read-only details
-from a deterministic fictional Demo catalog. The remaining Home choices stay
-as explicit placeholder Destinations while later Search and playback work
-remains intentionally out of scope.
+six choices for what fits right now, matching Stations and Playlists, and
+read-only details from a deterministic fictional Demo catalog. The remaining
+Home choices stay as explicit placeholder Destinations while later Search and
+playback work remains intentionally out of scope.
 
 ## Build and run
 
@@ -40,8 +40,8 @@ complete command-line surface.
 ## Keyboard controls
 
 - `↑`/`k` and `↓`/`j` move selection and scroll long lists.
-- `Enter` opens the selected Destination, Listening intent, Station, or Playlist
-  without starting playback.
+- `Enter` opens the selected choice, Station, or Playlist without starting
+  playback.
 - `Esc` restores the previous Destination's exact selection and scroll position.
 - `?` opens contextual help.
 - `q` or `Ctrl+C` quits.
