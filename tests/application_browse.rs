@@ -162,7 +162,7 @@ fn station_details_open_without_playback_and_back_restores_the_exact_snapshot() 
             "  Enter opened details only. Nothing started playing.",
             " NOW PLAYING  Nothing playing",
             "              Open a choice to keep exploring.",
-            " Esc back  ? help  q quit",
+            " p play  Space pause  Esc back  ? help  q quit",
         ]
     );
 
