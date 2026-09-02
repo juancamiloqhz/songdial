@@ -1,17 +1,8 @@
-use ratatui::buffer::Buffer;
 use songdial::{Application, Event, Key, Viewport};
 
-fn lines(buffer: &Buffer) -> Vec<String> {
-    let area = buffer.area;
+mod support;
 
-    (area.top()..area.bottom())
-        .map(|y| {
-            (area.left()..area.right())
-                .map(|x| buffer[(x, y)].symbol())
-                .collect()
-        })
-        .collect()
-}
+use support::lines;
 
 fn compact_line(content: &str) -> String {
     format!("{content:<80}")

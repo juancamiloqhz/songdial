@@ -4,7 +4,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
 };
 
-use crate::{Availability, CatalogId, DemoCatalog};
+use crate::{Availability, CatalogId, DemoCatalog, catalog::IntentMatch};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum HomeChoice {
@@ -91,7 +91,7 @@ pub enum Effect {
     Quit,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum Destination {
     Home,
     ListeningIntents,
@@ -121,15 +121,9 @@ struct DestinationSnapshot {
     active_pane: ActivePane,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum IntentItem {
-    Station(CatalogId),
-    Playlist(CatalogId),
-}
-
 impl DestinationSnapshot {
     const fn new(destination: Destination) -> Self {
-        let active_pane = match destination {
+        let active_pane = match &destination {
             Destination::StationDetails { .. } | Destination::NotYetAvailable(_) => {
                 ActivePane::Details
             }
@@ -158,9 +152,14 @@ pub struct Application {
 impl Application {
     #[must_use]
     pub fn new(viewport: Viewport) -> Self {
+        Self::with_catalog(viewport, DemoCatalog::fixed())
+    }
+
+    #[must_use]
+    pub fn with_catalog(viewport: Viewport, catalog: DemoCatalog) -> Self {
         Self {
             viewport,
-            catalog: DemoCatalog::fixed(),
+            catalog,
             current: DestinationSnapshot::new(Destination::Home),
             history: Vec::new(),
             help_visible: false,
@@ -224,7 +223,7 @@ impl Application {
     }
 
     fn keep_selection_visible(&mut self) {
-        let visible_items = match self.current.destination {
+        let visible_items = match &self.current.destination {
             Destination::ListeningIntent(_) => 7,
             Destination::PlaylistDetails { .. } => 13,
             Destination::Home => HomeChoice::ALL.len(),
@@ -240,22 +239,20 @@ impl Application {
     }
 
     fn current_item_count(&self) -> usize {
-        match self.current.destination {
+        match &self.current.destination {
             Destination::Home => HomeChoice::ALL.len(),
             Destination::ListeningIntents => self.catalog.listening_intents().len(),
-            Destination::ListeningIntent(intent_id) => self.intent_items(intent_id).len(),
+            Destination::ListeningIntent(intent_id) => self.catalog.intent_matches(intent_id).len(),
             Destination::PlaylistDetails { playlist_id, .. } => self
                 .catalog
-                .playlists()
-                .iter()
-                .find(|playlist| playlist.id() == playlist_id)
+                .playlist(playlist_id)
                 .map_or(0, |playlist| playlist.track_ids().len()),
             Destination::StationDetails { .. } | Destination::NotYetAvailable(_) => 0,
         }
     }
 
     fn open_selected(&mut self) {
-        let destination = match self.current.destination {
+        let destination = match self.current.destination.clone() {
             Destination::Home => {
                 let choice = self.selected_home_choice();
                 if choice == HomeChoice::ListeningIntents {
@@ -268,17 +265,21 @@ impl Application {
                 .catalog
                 .listening_intents()
                 .get(self.current.selection)
-                .map(|intent| Destination::ListeningIntent(intent.id()))
+                .map(|intent| Destination::ListeningIntent(intent.id().clone()))
                 .unwrap_or(Destination::ListeningIntents),
             Destination::ListeningIntent(intent_id) => {
-                match self.intent_items(intent_id).get(self.current.selection) {
-                    Some(IntentItem::Station(station_id)) => Destination::StationDetails {
+                match self
+                    .catalog
+                    .intent_matches(&intent_id)
+                    .get(self.current.selection)
+                {
+                    Some(IntentMatch::Station(station)) => Destination::StationDetails {
                         intent_id,
-                        station_id: *station_id,
+                        station_id: station.id().clone(),
                     },
-                    Some(IntentItem::Playlist(playlist_id)) => Destination::PlaylistDetails {
+                    Some(IntentMatch::Playlist(playlist)) => Destination::PlaylistDetails {
                         intent_id,
-                        playlist_id: *playlist_id,
+                        playlist_id: playlist.id().clone(),
                     },
                     None => return,
                 }
@@ -296,47 +297,6 @@ impl Application {
         if let Some(previous) = self.history.pop() {
             self.current = previous;
         }
-    }
-
-    fn intent_items(&self, intent_id: CatalogId) -> Vec<IntentItem> {
-        let Some(intent) = self
-            .catalog
-            .listening_intents()
-            .iter()
-            .find(|intent| intent.id() == intent_id)
-        else {
-            return Vec::new();
-        };
-
-        intent
-            .station_ids()
-            .iter()
-            .copied()
-            .map(IntentItem::Station)
-            .chain(
-                intent
-                    .playlist_ids()
-                    .iter()
-                    .copied()
-                    .map(IntentItem::Playlist),
-            )
-            .collect()
-    }
-
-    fn source_badge(&self, source_id: CatalogId) -> &'static str {
-        self.catalog
-            .services()
-            .iter()
-            .find(|service| service.id() == source_id)
-            .map_or("UNKNOWN", |service| service.badge())
-    }
-
-    fn source_name(&self, source_id: CatalogId) -> &'static str {
-        self.catalog
-            .services()
-            .iter()
-            .find(|service| service.id() == source_id)
-            .map_or("Unknown Source", |service| service.name())
     }
 
     #[must_use]
@@ -362,7 +322,7 @@ impl Application {
     }
 
     fn render_destination(&self, buffer: &mut Buffer, base: Style) {
-        match self.current.destination {
+        match &self.current.destination {
             Destination::Home => self.render_home(buffer, base),
             Destination::ListeningIntents => self.render_listening_intents(buffer, base),
             Destination::ListeningIntent(intent_id) => {
@@ -415,10 +375,7 @@ impl Application {
         buffer.set_string(0, self.guide_top(), " ↑/k up  ↓/j down  Enter open", base);
         buffer.set_string(0, self.guide_top() + 1, " ? help  q quit", base);
 
-        let selected = Style::default()
-            .fg(Color::Rgb(27, 29, 28))
-            .bg(Color::Rgb(214, 166, 75))
-            .add_modifier(Modifier::BOLD);
+        let selected = Self::selected_style();
         if self.current.active_pane == ActivePane::List {
             buffer.set_style(
                 Rect::new(2, 4 + self.current.selection as u16, 76, 1),
@@ -433,7 +390,7 @@ impl Application {
         buffer.set_string(
             0,
             3,
-            "  Choose the listening character that fits right now.",
+            "  Choose the Listening intent that fits right now.",
             base,
         );
 
@@ -450,10 +407,7 @@ impl Application {
         buffer.set_string(0, self.guide_top(), " ↑/k up  ↓/j down  Enter open", base);
         buffer.set_string(0, self.guide_top() + 1, " Esc back  ? help  q quit", base);
 
-        let selected = Style::default()
-            .fg(Color::Rgb(27, 29, 28))
-            .bg(Color::Rgb(214, 166, 75))
-            .add_modifier(Modifier::BOLD);
+        let selected = Self::selected_style();
         if self.current.active_pane == ActivePane::List {
             buffer.set_style(
                 Rect::new(2, 5 + self.current.selection as u16, 76, 1),
@@ -462,16 +416,11 @@ impl Application {
         }
     }
 
-    fn render_listening_intent(&self, buffer: &mut Buffer, base: Style, intent_id: CatalogId) {
-        let Some(intent) = self
-            .catalog
-            .listening_intents()
-            .iter()
-            .find(|intent| intent.id() == intent_id)
-        else {
+    fn render_listening_intent(&self, buffer: &mut Buffer, base: Style, intent_id: &CatalogId) {
+        let Some(intent) = self.catalog.listening_intent(intent_id) else {
             return;
         };
-        let items = self.intent_items(intent_id);
+        let matches = self.catalog.intent_matches(intent_id);
 
         buffer.set_string(
             0,
@@ -489,7 +438,7 @@ impl Application {
             intent.station_ids().len(),
             intent.playlist_ids().len()
         );
-        if items.is_empty() {
+        if matches.is_empty() {
             buffer.set_string(0, 4, counts, base);
             buffer.set_string(
                 0,
@@ -508,15 +457,15 @@ impl Application {
                 0,
                 4,
                 format!(
-                    "{counts} • Item {}/{}",
+                    "{counts} • Choice {}/{}",
                     self.current.selection + 1,
-                    items.len()
+                    matches.len()
                 ),
                 base,
             );
         }
 
-        for (slot, item) in items
+        for (slot, matched_content) in matches
             .iter()
             .skip(self.current.scroll_offset)
             .take(7)
@@ -529,43 +478,27 @@ impl Application {
             } else {
                 ""
             };
-            let (kind, title, source_id, detail, availability) = match item {
-                IntentItem::Station(station_id) => {
-                    let station = self
-                        .catalog
-                        .stations()
-                        .iter()
-                        .find(|station| station.id() == *station_id)
-                        .expect("fixed intent Station should exist");
-                    (
-                        "STATION",
-                        station.name(),
-                        station.source_id(),
-                        station.style(),
-                        station.availability(),
-                    )
-                }
-                IntentItem::Playlist(playlist_id) => {
-                    let playlist = self
-                        .catalog
-                        .playlists()
-                        .iter()
-                        .find(|playlist| playlist.id() == *playlist_id)
-                        .expect("fixed intent Playlist should exist");
-                    (
-                        "PLAYLIST",
-                        playlist.name(),
-                        playlist.source_id(),
-                        if playlist.track_ids().is_empty() {
-                            "EMPTY"
-                        } else {
-                            "ORDERED TRACKS"
-                        },
-                        playlist.availability(),
-                    )
-                }
+            let (kind, title, source_id, detail, availability) = match matched_content {
+                IntentMatch::Station(station) => (
+                    "STATION",
+                    station.name(),
+                    station.source_id(),
+                    station.style(),
+                    station.availability(),
+                ),
+                IntentMatch::Playlist(playlist) => (
+                    "PLAYLIST",
+                    playlist.name(),
+                    playlist.source_id(),
+                    if playlist.track_ids().is_empty() {
+                        "EMPTY"
+                    } else {
+                        "ORDERED TRACKS"
+                    },
+                    playlist.availability(),
+                ),
             };
-            let source = format!("[{}]", self.source_badge(source_id));
+            let source = format!("[{}]", self.catalog.source_badge(source_id));
             let availability = match availability {
                 Availability::Available => "AVAILABLE",
                 Availability::Loading => "LOADING",
@@ -586,16 +519,13 @@ impl Application {
             );
 
             if index == self.current.selection && self.current.active_pane == ActivePane::List {
-                let selected = Style::default()
-                    .fg(Color::Rgb(27, 29, 28))
-                    .bg(Color::Rgb(214, 166, 75))
-                    .add_modifier(Modifier::BOLD);
+                let selected = Self::selected_style();
                 buffer.set_style(Rect::new(2, row, 76, 2), selected);
             }
         }
 
         self.render_now_playing(buffer, base);
-        if items.is_empty() {
+        if matches.is_empty() {
             buffer.set_string(0, self.guide_top(), " Esc back  ? help  q quit", base);
         } else {
             buffer.set_string(
@@ -612,20 +542,16 @@ impl Application {
         &self,
         buffer: &mut Buffer,
         base: Style,
-        intent_id: CatalogId,
-        station_id: CatalogId,
+        intent_id: &CatalogId,
+        station_id: &CatalogId,
     ) {
         let intent = self
             .catalog
-            .listening_intents()
-            .iter()
-            .find(|intent| intent.id() == intent_id)
+            .listening_intent(intent_id)
             .expect("fixed Station parent intent should exist");
         let station = self
             .catalog
-            .stations()
-            .iter()
-            .find(|station| station.id() == station_id)
+            .station(station_id)
             .expect("fixed Station should exist");
         let status = match station.availability() {
             Availability::Available => "Available",
@@ -649,7 +575,10 @@ impl Application {
         buffer.set_string(
             0,
             6,
-            format!("  Source  {}", self.source_name(station.source_id())),
+            format!(
+                "  Source  {}",
+                self.catalog.source_name(station.source_id())
+            ),
             base,
         );
         buffer.set_string(0, 8, format!("  {}", station.description()), base);
@@ -671,21 +600,18 @@ impl Application {
         &self,
         buffer: &mut Buffer,
         base: Style,
-        intent_id: CatalogId,
-        playlist_id: CatalogId,
+        intent_id: &CatalogId,
+        playlist_id: &CatalogId,
     ) {
         let intent = self
             .catalog
-            .listening_intents()
-            .iter()
-            .find(|intent| intent.id() == intent_id)
+            .listening_intent(intent_id)
             .expect("fixed Playlist parent intent should exist");
         let playlist = self
             .catalog
-            .playlists()
-            .iter()
-            .find(|playlist| playlist.id() == playlist_id)
+            .playlist(playlist_id)
             .expect("fixed Playlist should exist");
+        let tracks = self.catalog.playlist_tracks(playlist_id);
 
         buffer.set_string(
             0,
@@ -705,7 +631,7 @@ impl Application {
             5,
             format!(
                 "  Source  {} • {} Tracks",
-                self.source_name(playlist.source_id()),
+                self.catalog.source_name(playlist.source_id()),
                 playlist.track_ids().len()
             ),
             base,
@@ -732,7 +658,7 @@ impl Application {
                 0,
                 6,
                 format!(
-                    "  TRACKS • Item {}/{}",
+                    "  TRACKS • Track {}/{}",
                     self.current.selection + 1,
                     playlist.track_ids().len()
                 ),
@@ -740,20 +666,13 @@ impl Application {
             );
         }
 
-        for (slot, track_id) in playlist
-            .track_ids()
+        for (slot, track) in tracks
             .iter()
             .skip(self.current.scroll_offset)
             .take(13)
             .enumerate()
         {
             let index = self.current.scroll_offset + slot;
-            let track = self
-                .catalog
-                .tracks()
-                .iter()
-                .find(|track| track.id() == *track_id)
-                .expect("fixed Playlist Track should exist");
             let selected = index == self.current.selection;
             let state = match (selected, track.availability()) {
                 (true, Availability::Unavailable(_)) => "SEL+UNAV >",
@@ -762,7 +681,7 @@ impl Application {
                 (false, Availability::Loading) => "LOADING ~",
                 (false, Availability::Available) => "",
             };
-            let source = format!("[{}]", self.source_badge(track.source_id()));
+            let source = format!("[{}]", self.catalog.source_badge(track.source_id()));
             let row = 7 + slot as u16;
 
             buffer.set_string(
@@ -778,11 +697,7 @@ impl Application {
             );
 
             if selected && self.current.active_pane == ActivePane::List {
-                let selected_style = Style::default()
-                    .fg(Color::Rgb(27, 29, 28))
-                    .bg(Color::Rgb(214, 166, 75))
-                    .add_modifier(Modifier::BOLD);
-                buffer.set_style(Rect::new(2, row, 76, 1), selected_style);
+                buffer.set_style(Rect::new(2, row, 76, 1), Self::selected_style());
             }
         }
 
@@ -807,26 +722,20 @@ impl Application {
     }
 
     fn render_help(&self, buffer: &mut Buffer, base: Style) {
-        let destination = match self.current.destination {
+        let destination = match &self.current.destination {
             Destination::Home => "HOME",
             Destination::ListeningIntents => "MOOD & ACTIVITY",
             Destination::ListeningIntent(intent_id) => self
                 .catalog
-                .listening_intents()
-                .iter()
-                .find(|intent| intent.id() == intent_id)
+                .listening_intent(intent_id)
                 .map_or("LISTENING INTENT", |intent| intent.name()),
             Destination::StationDetails { station_id, .. } => self
                 .catalog
-                .stations()
-                .iter()
-                .find(|station| station.id() == station_id)
+                .station(station_id)
                 .map_or("STATION", |station| station.name()),
             Destination::PlaylistDetails { playlist_id, .. } => self
                 .catalog
-                .playlists()
-                .iter()
-                .find(|playlist| playlist.id() == playlist_id)
+                .playlist(playlist_id)
                 .map_or("PLAYLIST", |playlist| playlist.name()),
             Destination::NotYetAvailable(choice) => choice.text().title,
         };
@@ -839,7 +748,7 @@ impl Application {
         buffer.set_string(0, 8, "  ?        Show contextual help", base);
         buffer.set_string(0, 9, "  q        Quit", base);
         buffer.set_string(0, 10, "  Ctrl+C   Quit immediately", base);
-        let local_help = match self.current.destination {
+        let local_help = match &self.current.destination {
             Destination::Home => "  Home: choose a listening path, then press Enter.",
             Destination::ListeningIntents => {
                 "  Mood & activity: open a Listening intent with Enter."
@@ -870,6 +779,13 @@ impl Application {
 
     fn selected_home_choice(&self) -> HomeChoice {
         HomeChoice::ALL[self.current.selection]
+    }
+
+    fn selected_style() -> Style {
+        Style::default()
+            .fg(Color::Rgb(27, 29, 28))
+            .bg(Color::Rgb(214, 166, 75))
+            .add_modifier(Modifier::BOLD)
     }
 }
 

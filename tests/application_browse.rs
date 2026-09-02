@@ -1,17 +1,8 @@
-use ratatui::buffer::Buffer;
-use songdial::{Application, Event, Key, Viewport};
+use songdial::{Application, DemoCatalog, Event, Key, ListeningIntent, Service, Station, Viewport};
 
-fn lines(buffer: &Buffer) -> Vec<String> {
-    let area = buffer.area;
+mod support;
 
-    (area.top()..area.bottom())
-        .map(|y| {
-            (area.left()..area.right())
-                .map(|x| buffer[(x, y)].symbol())
-                .collect()
-        })
-        .collect()
-}
+use support::lines;
 
 #[test]
 fn home_opens_the_ordered_listening_intents_without_starting_playback() {
@@ -27,7 +18,7 @@ fn home_opens_the_ordered_listening_intents_without_starting_playback() {
         [
             " SONGDIAL / MOOD & ACTIVITY",
             "  LISTENING INTENTS",
-            "  Choose the listening character that fits right now.",
+            "  Choose the Listening intent that fits right now.",
             "  > Deep Work                                                 SELECTED",
             "    Focus",
             "    Flow",
@@ -69,7 +60,7 @@ fn listening_intent_scrolls_through_matching_stations_and_playlists_with_sources
             " SONGDIAL / MOOD & ACTIVITY / DEEP WORK",
             "  DEEP WORK",
             "  Steady, low-distraction sound for sustained concentration.",
-            "  8 Stations • 5 Playlists • Item 9/13",
+            "  8 Stations • 5 Playlists • Choice 9/13",
             true,
             true,
             true,
@@ -153,7 +144,7 @@ fn long_playlist_scrolls_to_both_boundaries_and_restores_its_parent_snapshot() {
             "  PLAYLIST",
             "  Deep Work Rotation",
             "  Source  Morrow Audio • 20 Tracks",
-            "  TRACKS • Item 20/20",
+            "  TRACKS • Track 20/20",
             true,
             true,
             true,
@@ -212,6 +203,58 @@ fn empty_intent_and_playlist_explain_their_deterministic_next_action() {
                 " NOW PLAYING  Nothing playing",
             ]
             .map(str::to_owned),
+        )
+    );
+}
+
+#[test]
+fn application_accepts_dynamically_owned_replacement_catalog_data() {
+    let service_id = String::from("local-service");
+    let station_id = String::from("local-reading-room");
+    let intent_name = String::from("Close Reading");
+    let catalog = DemoCatalog::new(
+        vec![Service::new(
+            service_id.clone(),
+            String::from("Local Service"),
+            String::from("LOCAL"),
+        )],
+        vec![ListeningIntent::new(
+            String::from("close-reading"),
+            intent_name.clone(),
+            String::from("Quiet detail for a demanding text."),
+            &[station_id.as_str()],
+            &[],
+        )],
+        vec![Station::available(
+            station_id,
+            String::from("Reading Room"),
+            String::from("Minimal piano"),
+            String::from("A restrained signal for careful reading."),
+            service_id,
+        )],
+        vec![],
+        vec![],
+    );
+    let mut application = Application::with_catalog(Viewport::new(80, 24), catalog);
+
+    application.handle_event(Event::Key(Key::Enter));
+    application.handle_event(Event::Key(Key::Enter));
+
+    let rendered = lines(&application.render());
+    assert_eq!(
+        (
+            rendered[0].trim_end(),
+            rendered[2].trim_end(),
+            rendered[3].trim_end(),
+            rendered[6].contains("Reading Room"),
+            rendered[6].contains("[LOCAL]"),
+        ),
+        (
+            " SONGDIAL / MOOD & ACTIVITY / CLOSE READING",
+            "  CLOSE READING",
+            "  Quiet detail for a demanding text.",
+            true,
+            true,
         )
     );
 }

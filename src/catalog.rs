@@ -1,99 +1,113 @@
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct CatalogId(&'static str);
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct CatalogId(String);
 
 impl CatalogId {
     #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        self.0
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Availability {
     Available,
     Loading,
-    Unavailable(&'static str),
+    Unavailable(String),
+}
+
+impl Availability {
+    #[must_use]
+    pub fn unavailable(reason: impl Into<String>) -> Self {
+        Self::Unavailable(reason.into())
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CatalogIdentity {
     id: CatalogId,
-    name: &'static str,
+    name: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Service {
     identity: CatalogIdentity,
-    badge: &'static str,
+    badge: String,
 }
 
 impl Service {
-    const fn new(id: &'static str, name: &'static str, badge: &'static str) -> Self {
+    #[must_use]
+    pub fn new(id: impl Into<String>, name: impl Into<String>, badge: impl Into<String>) -> Self {
         Self {
             identity: CatalogIdentity {
-                id: CatalogId(id),
-                name,
+                id: CatalogId::new(id),
+                name: name.into(),
             },
-            badge,
+            badge: badge.into(),
         }
     }
 
     #[must_use]
-    pub const fn id(&self) -> CatalogId {
-        self.identity.id
+    pub const fn id(&self) -> &CatalogId {
+        &self.identity.id
     }
 
     #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.identity.name
+    pub fn name(&self) -> &str {
+        &self.identity.name
     }
 
     #[must_use]
-    pub const fn badge(&self) -> &'static str {
-        self.badge
+    pub fn badge(&self) -> &str {
+        &self.badge
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListeningIntent {
     identity: CatalogIdentity,
-    description: &'static str,
+    description: String,
     station_ids: Vec<CatalogId>,
     playlist_ids: Vec<CatalogId>,
 }
 
 impl ListeningIntent {
-    fn new(
-        id: &'static str,
-        name: &'static str,
-        description: &'static str,
-        station_ids: &[&'static str],
-        playlist_ids: &[&'static str],
+    #[must_use]
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        station_ids: &[&str],
+        playlist_ids: &[&str],
     ) -> Self {
         Self {
             identity: CatalogIdentity {
-                id: CatalogId(id),
-                name,
+                id: CatalogId::new(id),
+                name: name.into(),
             },
-            description,
-            station_ids: station_ids.iter().copied().map(CatalogId).collect(),
-            playlist_ids: playlist_ids.iter().copied().map(CatalogId).collect(),
+            description: description.into(),
+            station_ids: station_ids.iter().map(|id| CatalogId::new(*id)).collect(),
+            playlist_ids: playlist_ids.iter().map(|id| CatalogId::new(*id)).collect(),
         }
     }
 
     #[must_use]
-    pub const fn id(&self) -> CatalogId {
-        self.identity.id
+    pub const fn id(&self) -> &CatalogId {
+        &self.identity.id
     }
 
     #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.identity.name
+    pub fn name(&self) -> &str {
+        &self.identity.name
     }
 
     #[must_use]
-    pub const fn description(&self) -> &'static str {
-        self.description
+    pub fn description(&self) -> &str {
+        &self.description
     }
 
     #[must_use]
@@ -110,19 +124,20 @@ impl ListeningIntent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Station {
     identity: CatalogIdentity,
-    style: &'static str,
-    description: &'static str,
+    style: String,
+    description: String,
     source_id: CatalogId,
     availability: Availability,
 }
 
 impl Station {
-    const fn new(
-        id: &'static str,
-        name: &'static str,
-        style: &'static str,
-        description: &'static str,
-        source_id: &'static str,
+    #[must_use]
+    pub fn available(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        style: impl Into<String>,
+        description: impl Into<String>,
+        source_id: impl Into<String>,
     ) -> Self {
         Self::with_availability(
             id,
@@ -134,12 +149,13 @@ impl Station {
         )
     }
 
-    const fn loading(
-        id: &'static str,
-        name: &'static str,
-        style: &'static str,
-        description: &'static str,
-        source_id: &'static str,
+    #[must_use]
+    pub fn loading(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        style: impl Into<String>,
+        description: impl Into<String>,
+        source_id: impl Into<String>,
     ) -> Self {
         Self::with_availability(
             id,
@@ -151,13 +167,14 @@ impl Station {
         )
     }
 
-    const fn unavailable(
-        id: &'static str,
-        name: &'static str,
-        style: &'static str,
-        description: &'static str,
-        source_id: &'static str,
-        reason: &'static str,
+    #[must_use]
+    pub fn unavailable(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        style: impl Into<String>,
+        description: impl Into<String>,
+        source_id: impl Into<String>,
+        reason: impl Into<String>,
     ) -> Self {
         Self::with_availability(
             id,
@@ -165,111 +182,114 @@ impl Station {
             style,
             description,
             source_id,
-            Availability::Unavailable(reason),
+            Availability::unavailable(reason),
         )
     }
 
-    const fn with_availability(
-        id: &'static str,
-        name: &'static str,
-        style: &'static str,
-        description: &'static str,
-        source_id: &'static str,
+    fn with_availability(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        style: impl Into<String>,
+        description: impl Into<String>,
+        source_id: impl Into<String>,
         availability: Availability,
     ) -> Self {
         Self {
             identity: CatalogIdentity {
-                id: CatalogId(id),
-                name,
+                id: CatalogId::new(id),
+                name: name.into(),
             },
-            style,
-            description,
-            source_id: CatalogId(source_id),
+            style: style.into(),
+            description: description.into(),
+            source_id: CatalogId::new(source_id),
             availability,
         }
     }
 
     #[must_use]
-    pub const fn id(&self) -> CatalogId {
-        self.identity.id
+    pub const fn id(&self) -> &CatalogId {
+        &self.identity.id
     }
 
     #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.identity.name
+    pub fn name(&self) -> &str {
+        &self.identity.name
     }
 
     #[must_use]
-    pub const fn style(&self) -> &'static str {
-        self.style
+    pub fn style(&self) -> &str {
+        &self.style
     }
 
     #[must_use]
-    pub const fn description(&self) -> &'static str {
-        self.description
+    pub fn description(&self) -> &str {
+        &self.description
     }
 
     #[must_use]
-    pub const fn source_id(&self) -> CatalogId {
-        self.source_id
+    pub const fn source_id(&self) -> &CatalogId {
+        &self.source_id
     }
 
     #[must_use]
-    pub const fn availability(&self) -> Availability {
-        self.availability
+    pub const fn availability(&self) -> &Availability {
+        &self.availability
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Playlist {
     identity: CatalogIdentity,
-    description: &'static str,
+    description: String,
     source_id: CatalogId,
+    availability: Availability,
     track_ids: Vec<CatalogId>,
 }
 
 impl Playlist {
-    fn new(
-        id: &'static str,
-        name: &'static str,
-        description: &'static str,
-        source_id: &'static str,
-        track_ids: &[&'static str],
+    #[must_use]
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        source_id: impl Into<String>,
+        track_ids: &[&str],
     ) -> Self {
         Self {
             identity: CatalogIdentity {
-                id: CatalogId(id),
-                name,
+                id: CatalogId::new(id),
+                name: name.into(),
             },
-            description,
-            source_id: CatalogId(source_id),
-            track_ids: track_ids.iter().copied().map(CatalogId).collect(),
+            description: description.into(),
+            source_id: CatalogId::new(source_id),
+            availability: Availability::Available,
+            track_ids: track_ids.iter().map(|id| CatalogId::new(*id)).collect(),
         }
     }
 
     #[must_use]
-    pub const fn id(&self) -> CatalogId {
-        self.identity.id
+    pub const fn id(&self) -> &CatalogId {
+        &self.identity.id
     }
 
     #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.identity.name
+    pub fn name(&self) -> &str {
+        &self.identity.name
     }
 
     #[must_use]
-    pub const fn description(&self) -> &'static str {
-        self.description
+    pub fn description(&self) -> &str {
+        &self.description
     }
 
     #[must_use]
-    pub const fn source_id(&self) -> CatalogId {
-        self.source_id
+    pub const fn source_id(&self) -> &CatalogId {
+        &self.source_id
     }
 
     #[must_use]
-    pub const fn availability(&self) -> Availability {
-        Availability::Available
+    pub const fn availability(&self) -> &Availability {
+        &self.availability
     }
 
     #[must_use]
@@ -281,18 +301,19 @@ impl Playlist {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Track {
     identity: CatalogIdentity,
-    creator: &'static str,
+    creator: String,
     source_id: CatalogId,
     duration_seconds: u16,
     availability: Availability,
 }
 
 impl Track {
-    const fn new(
-        id: &'static str,
-        name: &'static str,
-        creator: &'static str,
-        source_id: &'static str,
+    #[must_use]
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        creator: impl Into<String>,
+        source_id: impl Into<String>,
         duration_seconds: u16,
     ) -> Self {
         Self::with_availability(
@@ -305,13 +326,14 @@ impl Track {
         )
     }
 
-    const fn unavailable(
-        id: &'static str,
-        name: &'static str,
-        creator: &'static str,
-        source_id: &'static str,
+    #[must_use]
+    pub fn unavailable(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        creator: impl Into<String>,
+        source_id: impl Into<String>,
         duration_seconds: u16,
-        reason: &'static str,
+        reason: impl Into<String>,
     ) -> Self {
         Self::with_availability(
             id,
@@ -319,48 +341,48 @@ impl Track {
             creator,
             source_id,
             duration_seconds,
-            Availability::Unavailable(reason),
+            Availability::unavailable(reason),
         )
     }
 
-    const fn with_availability(
-        id: &'static str,
-        name: &'static str,
-        creator: &'static str,
-        source_id: &'static str,
+    fn with_availability(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        creator: impl Into<String>,
+        source_id: impl Into<String>,
         duration_seconds: u16,
         availability: Availability,
     ) -> Self {
         Self {
             identity: CatalogIdentity {
-                id: CatalogId(id),
-                name,
+                id: CatalogId::new(id),
+                name: name.into(),
             },
-            creator,
-            source_id: CatalogId(source_id),
+            creator: creator.into(),
+            source_id: CatalogId::new(source_id),
             duration_seconds,
             availability,
         }
     }
 
     #[must_use]
-    pub const fn id(&self) -> CatalogId {
-        self.identity.id
+    pub const fn id(&self) -> &CatalogId {
+        &self.identity.id
     }
 
     #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.identity.name
+    pub fn name(&self) -> &str {
+        &self.identity.name
     }
 
     #[must_use]
-    pub const fn creator(&self) -> &'static str {
-        self.creator
+    pub fn creator(&self) -> &str {
+        &self.creator
     }
 
     #[must_use]
-    pub const fn source_id(&self) -> CatalogId {
-        self.source_id
+    pub const fn source_id(&self) -> &CatalogId {
+        &self.source_id
     }
 
     #[must_use]
@@ -369,15 +391,22 @@ impl Track {
     }
 
     #[must_use]
-    pub const fn availability(&self) -> Availability {
-        self.availability
+    pub const fn availability(&self) -> &Availability {
+        &self.availability
     }
 }
 
-/// The fixed fictional catalog used by the first Songdial milestone.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum IntentMatch<'a> {
+    Station(&'a Station),
+    Playlist(&'a Playlist),
+}
+
+/// Catalog data for the first Songdial milestone.
 ///
-/// This data is deliberately local and deterministic. It is not a schema for
-/// future Service integrations.
+/// [`Self::fixed`] returns the deterministic fictional fixture, while
+/// [`Self::new`] lets the application receive replacement local data. This is
+/// not a schema for future Service integrations.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DemoCatalog {
     services: Vec<Service>,
@@ -388,6 +417,23 @@ pub struct DemoCatalog {
 }
 
 impl DemoCatalog {
+    #[must_use]
+    pub fn new(
+        services: Vec<Service>,
+        listening_intents: Vec<ListeningIntent>,
+        stations: Vec<Station>,
+        playlists: Vec<Playlist>,
+        tracks: Vec<Track>,
+    ) -> Self {
+        Self {
+            services,
+            listening_intents,
+            stations,
+            playlists,
+            tracks,
+        }
+    }
+
     #[must_use]
     pub fn fixed() -> Self {
         Self {
@@ -467,7 +513,7 @@ impl DemoCatalog {
                 ),
             ],
             stations: vec![
-                Station::new(
+                Station::available(
                     "morrow-night-ledger",
                     "Night Ledger",
                     "Ambient",
@@ -481,28 +527,28 @@ impl DemoCatalog {
                     "A bright pulse that stays behind the work.",
                     "harbor-sound",
                 ),
-                Station::new(
+                Station::available(
                     "morrow-stillwater-fm",
                     "Stillwater FM",
                     "Ambient piano",
                     "Sparse piano and room tone with long breathing space.",
                     "morrow-audio",
                 ),
-                Station::new(
+                Station::available(
                     "harbor-kinetic-line",
                     "Kinetic Line",
                     "Instrumental pulse",
                     "Measured rhythmic instrumentals with no vocals.",
                     "harbor-sound",
                 ),
-                Station::new(
+                Station::available(
                     "morrow-low-tide-radio",
                     "Low Tide Radio",
                     "Downtempo",
                     "Slow electronic currents for a settled pace.",
                     "morrow-audio",
                 ),
-                Station::new(
+                Station::available(
                     "harbor-afterglow-signal",
                     "Afterglow Signal",
                     "Warm electronica",
@@ -517,7 +563,7 @@ impl DemoCatalog {
                     "morrow-audio",
                     "Signal maintenance is in progress.",
                 ),
-                Station::new(
+                Station::available(
                     "harbor-open-frequency",
                     "Open Frequency",
                     "Indie instrumental",
@@ -798,5 +844,63 @@ impl DemoCatalog {
     #[must_use]
     pub fn tracks(&self) -> &[Track] {
         &self.tracks
+    }
+
+    pub(crate) fn service(&self, id: &CatalogId) -> Option<&Service> {
+        self.services.iter().find(|service| service.id() == id)
+    }
+
+    pub(crate) fn listening_intent(&self, id: &CatalogId) -> Option<&ListeningIntent> {
+        self.listening_intents
+            .iter()
+            .find(|intent| intent.id() == id)
+    }
+
+    pub(crate) fn station(&self, id: &CatalogId) -> Option<&Station> {
+        self.stations.iter().find(|station| station.id() == id)
+    }
+
+    pub(crate) fn playlist(&self, id: &CatalogId) -> Option<&Playlist> {
+        self.playlists.iter().find(|playlist| playlist.id() == id)
+    }
+
+    pub(crate) fn track(&self, id: &CatalogId) -> Option<&Track> {
+        self.tracks.iter().find(|track| track.id() == id)
+    }
+
+    pub(crate) fn intent_matches(&self, intent_id: &CatalogId) -> Vec<IntentMatch<'_>> {
+        let Some(intent) = self.listening_intent(intent_id) else {
+            return Vec::new();
+        };
+        let stations = intent
+            .station_ids()
+            .iter()
+            .filter_map(|station_id| self.station(station_id).map(IntentMatch::Station));
+        let playlists = intent
+            .playlist_ids()
+            .iter()
+            .filter_map(|playlist_id| self.playlist(playlist_id).map(IntentMatch::Playlist));
+
+        stations.chain(playlists).collect()
+    }
+
+    pub(crate) fn playlist_tracks(&self, playlist_id: &CatalogId) -> Vec<&Track> {
+        self.playlist(playlist_id)
+            .map_or_else(Vec::new, |playlist| {
+                playlist
+                    .track_ids()
+                    .iter()
+                    .filter_map(|track_id| self.track(track_id))
+                    .collect()
+            })
+    }
+
+    pub(crate) fn source_badge(&self, source_id: &CatalogId) -> &str {
+        self.service(source_id).map_or("UNKNOWN", Service::badge)
+    }
+
+    pub(crate) fn source_name(&self, source_id: &CatalogId) -> &str {
+        self.service(source_id)
+            .map_or("Unknown Source", Service::name)
     }
 }

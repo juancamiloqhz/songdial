@@ -1,6 +1,6 @@
 use songdial::{Availability, CatalogId, DemoCatalog};
 
-fn ids(identifiers: impl IntoIterator<Item = CatalogId>) -> Vec<&'static str> {
+fn ids<'a>(identifiers: impl IntoIterator<Item = &'a CatalogId>) -> Vec<&'a str> {
     identifiers.into_iter().map(CatalogId::as_str).collect()
 }
 
@@ -141,14 +141,14 @@ fn fixed_demo_catalog_keeps_loading_and_unavailable_scenarios_deterministic() {
     let station_scenarios = catalog
         .stations()
         .iter()
-        .filter(|station| station.availability() != Availability::Available)
-        .map(|station| (station.id().as_str(), station.availability()))
+        .filter(|station| station.availability() != &Availability::Available)
+        .map(|station| (station.id().as_str(), station.availability().clone()))
         .collect::<Vec<_>>();
     let track_scenarios = catalog
         .tracks()
         .iter()
-        .filter(|track| track.availability() != Availability::Available)
-        .map(|track| (track.id().as_str(), track.availability()))
+        .filter(|track| track.availability() != &Availability::Available)
+        .map(|track| (track.id().as_str(), track.availability().clone()))
         .collect::<Vec<_>>();
 
     assert_eq!(
@@ -158,12 +158,12 @@ fn fixed_demo_catalog_keeps_loading_and_unavailable_scenarios_deterministic() {
                 ("harbor-daylight-circuit", Availability::Loading),
                 (
                     "morrow-northbound-static",
-                    Availability::Unavailable("Signal maintenance is in progress."),
+                    Availability::unavailable("Signal maintenance is in progress."),
                 ),
             ],
             vec![(
                 "harbor-blueprint-sky",
-                Availability::Unavailable("This recording is unavailable in the Demo catalog.",),
+                Availability::unavailable("This recording is unavailable in the Demo catalog.",),
             )],
         )
     );
@@ -178,8 +178,8 @@ fn listening_intent_matches_are_ordered_and_include_an_empty_collection() {
         .map(|intent| {
             (
                 intent.id().as_str(),
-                ids(intent.station_ids().iter().copied()),
-                ids(intent.playlist_ids().iter().copied()),
+                ids(intent.station_ids()),
+                ids(intent.playlist_ids()),
             )
         })
         .collect::<Vec<_>>();
