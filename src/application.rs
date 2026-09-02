@@ -465,7 +465,7 @@ impl Application {
             );
         }
 
-        for (slot, matched_content) in matches
+        for (slot, intent_match) in matches
             .iter()
             .skip(self.current.scroll_offset)
             .take(7)
@@ -478,7 +478,7 @@ impl Application {
             } else {
                 ""
             };
-            let (kind, title, source_id, detail, availability) = match matched_content {
+            let (kind, title, source_id, detail, availability) = match intent_match {
                 IntentMatch::Station(station) => (
                     "STATION",
                     station.name(),
