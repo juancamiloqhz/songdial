@@ -38,7 +38,7 @@ fn launches_home_in_the_exact_compact_frame() {
         " NOW PLAYING  Nothing playing",
         "              Open a choice to keep exploring.",
         " ↑/k up  ↓/j down  Enter open",
-        " ? help  q quit",
+        " n queue  ? help  q quit",
     ]
     .map(compact_line);
 
@@ -112,7 +112,7 @@ fn enter_opens_every_home_choice_without_starting_playback() {
             } else {
                 (
                     "  This Destination is not yet available.".to_owned(),
-                    " Esc back  ? help  q quit".to_owned(),
+                    " n queue  Esc back  ? help  q quit".to_owned(),
                 )
             };
             (
@@ -161,8 +161,8 @@ fn help_lists_global_and_destination_keys_without_losing_context() {
 
     application.handle_event(Event::Key(Key::Char('?')));
     let help = lines(&application.render());
-    let help_excerpt =
-        [0, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 20, 22].map(|row| help[row].trim_end().to_owned());
+    let help_excerpt = [0, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 20, 22]
+        .map(|row| help[row].trim_end().to_owned());
 
     application.handle_event(Event::Key(Key::Escape));
     let restored = lines(&application.render());
@@ -178,6 +178,9 @@ fn help_lists_global_and_destination_keys_without_losing_context() {
                 "  Enter    Open without playing".to_owned(),
                 "  p        Start a new Playback session".to_owned(),
                 "  Space    Pause, resume, or restart".to_owned(),
+                "  a        Add a Track or Playlist to the Queue".to_owned(),
+                "  d        Remove the selected queued Track".to_owned(),
+                "  n        Open Now Playing and Queue".to_owned(),
                 "  Esc      Go back or close help".to_owned(),
                 "  ?        Show contextual help".to_owned(),
                 "  q / Ctrl+C  Quit".to_owned(),
@@ -255,7 +258,7 @@ fn resize_events_update_the_viewport_without_resetting_selection() {
             " NOW PLAYING  Nothing playing",
             "              Open a choice to keep exploring.",
             " ↑/k up  ↓/j down  Enter open",
-            " ? help  q quit",
+            " n queue  ? help  q quit",
         )
     );
 }

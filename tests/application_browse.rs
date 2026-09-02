@@ -29,7 +29,7 @@ fn home_opens_the_ordered_listening_intents_without_starting_playback() {
             " NOW PLAYING  Nothing playing",
             "              Open a choice to keep exploring.",
             " ↑/k up  ↓/j down  Enter open",
-            " Esc back  ? help  q quit",
+            " n queue  Esc back",
         ]
     );
 }
@@ -126,7 +126,7 @@ fn mood_and_activity_help_uses_listener_facing_language() {
     let direction_help = lines(&application.render());
 
     assert_eq!(
-        (chooser_help[12].trim_end(), direction_help[12].trim_end(),),
+        (chooser_help[16].trim_end(), direction_help[16].trim_end(),),
         (
             "  Mood & activity: choose what fits with Enter.",
             "  Open a Station or Playlist with Enter.",
@@ -162,7 +162,7 @@ fn station_details_open_without_playback_and_back_restores_the_exact_snapshot() 
             "  Enter opened details only. Nothing started playing.",
             " NOW PLAYING  Nothing playing",
             "              Open a choice to keep exploring.",
-            " p play  Space pause  Esc back  ? help  q quit",
+            " p play  Space pause  n queue",
         ]
     );
 
