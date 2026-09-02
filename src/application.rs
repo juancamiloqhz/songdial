@@ -515,7 +515,7 @@ impl Application {
 
             if index == self.current.selection && self.current.active_pane == ActivePane::List {
                 let selected = Self::selected_style();
-                buffer.set_style(Rect::new(2, row, 78, 2), selected);
+                buffer.set_style(Self::dense_list_selection_area(row, 2), selected);
             }
         }
 
@@ -692,7 +692,10 @@ impl Application {
             );
 
             if selected && self.current.active_pane == ActivePane::List {
-                buffer.set_style(Rect::new(2, row, 76, 1), Self::selected_style());
+                buffer.set_style(
+                    Self::dense_list_selection_area(row, 1),
+                    Self::selected_style(),
+                );
             }
         }
 
@@ -777,6 +780,10 @@ impl Application {
             .fg(Color::Rgb(27, 29, 28))
             .bg(Color::Rgb(214, 166, 75))
             .add_modifier(Modifier::BOLD)
+    }
+
+    const fn dense_list_selection_area(row: u16, height: u16) -> Rect {
+        Rect::new(2, row, 78, height)
     }
 }
 

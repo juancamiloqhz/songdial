@@ -91,6 +91,29 @@ fn selected_listening_intent_match_highlights_its_complete_source_badge() {
 }
 
 #[test]
+fn selected_playlist_track_highlights_its_complete_source_badge() {
+    let mut application = Application::new(Viewport::new(80, 24));
+    application.handle_event(Event::Key(Key::Enter));
+    application.handle_event(Event::Key(Key::Enter));
+    for _ in 0..8 {
+        application.handle_event(Event::Key(Key::Down));
+    }
+    application.handle_event(Event::Key(Key::Enter));
+
+    let buffer = application.render();
+    let rendered = lines(&buffer);
+    let source_start = rendered[7].find("[MORROW]").expect("selected Source badge");
+    let source_backgrounds = (source_start..source_start + "[MORROW]".len())
+        .map(|column| buffer[(u16::try_from(column).expect("terminal column"), 7)].bg)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        source_backgrounds,
+        vec![Color::Rgb(214, 166, 75); "[MORROW]".len()]
+    );
+}
+
+#[test]
 fn mood_and_activity_help_uses_listener_facing_language() {
     let mut application = Application::new(Viewport::new(80, 24));
     application.handle_event(Event::Key(Key::Enter));
