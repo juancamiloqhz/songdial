@@ -1,17 +1,8 @@
-use ratatui::buffer::Buffer;
 use songdial::{Application, Event, Key, Viewport};
 
-fn lines(buffer: &Buffer) -> Vec<String> {
-    let area = buffer.area;
+mod support;
 
-    (area.top()..area.bottom())
-        .map(|y| {
-            (area.left()..area.right())
-                .map(|x| buffer[(x, y)].symbol())
-                .collect()
-        })
-        .collect()
-}
+use support::lines;
 
 fn compact_line(content: &str) -> String {
     format!("{content:<80}")
@@ -99,9 +90,10 @@ fn enter_opens_every_home_choice_without_starting_playback() {
 
         application.handle_event(Event::Key(Key::Enter));
         let rendered = lines(&application.render());
+        let body_row = if index == 0 { 2 } else { 4 };
         opened.push((
             rendered[0].trim_end().to_owned(),
-            rendered[4].trim_end().to_owned(),
+            rendered[body_row].trim_end().to_owned(),
             rendered[20].trim_end().to_owned(),
             rendered[22].trim_end().to_owned(),
             *choice,
@@ -109,16 +101,29 @@ fn enter_opens_every_home_choice_without_starting_playback() {
     }
 
     let expected = choices
-        .map(|choice| {
+        .iter()
+        .enumerate()
+        .map(|(index, choice)| {
+            let (body, guide) = if index == 0 {
+                (
+                    "  MOOD & ACTIVITY".to_owned(),
+                    " ↑/k up  ↓/j down  Enter open".to_owned(),
+                )
+            } else {
+                (
+                    "  This Destination is not yet available.".to_owned(),
+                    " Esc back  ? help  q quit".to_owned(),
+                )
+            };
             (
                 format!(" SONGDIAL / {choice}"),
-                "  This Destination is not yet available.".to_owned(),
+                body,
                 " NOW PLAYING  Nothing playing".to_owned(),
-                " Esc back  ? help  q quit".to_owned(),
-                choice,
+                guide,
+                *choice,
             )
         })
-        .to_vec();
+        .collect::<Vec<_>>();
     assert_eq!(opened, expected);
 }
 

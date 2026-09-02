@@ -6,9 +6,11 @@ Songdial is a discovery-first terminal music application. It brings moods,
 radio stations, personal playlists, and search into one coherent interface,
 independent of where the music comes from.
 
-Songdial is in pre-alpha. Its first production tracer bullet is a Rust and
-Ratatui terminal application that opens directly on Home. Every Home choice can
-be explored through an explicit placeholder Destination while later catalog and
+Songdial is in pre-alpha. The Rust and Ratatui application opens directly on
+Home and includes its first complete browse journey: Mood & activity leads to
+six choices for what fits right now, matching Stations and Playlists, and
+read-only details from a deterministic fictional Demo catalog. The remaining
+Home choices stay as explicit placeholder Destinations while later Search and
 playback work remains intentionally out of scope.
 
 ## Build and run
@@ -37,9 +39,10 @@ complete command-line surface.
 
 ## Keyboard controls
 
-- `↑`/`k` and `↓`/`j` move the Home selection.
-- `Enter` opens the selected Destination without starting playback.
-- `Esc` returns Home and restores its selection.
+- `↑`/`k` and `↓`/`j` move selection and scroll long lists.
+- `Enter` opens the selected choice, Station, or Playlist without starting
+  playback.
+- `Esc` restores the previous Destination's exact selection and scroll position.
 - `?` opens contextual help.
 - `q` or `Ctrl+C` quits.
 
@@ -61,6 +64,6 @@ cargo test --locked
 
 ## Status
 
-Pre-alpha. Home and the durable Application Module/terminal adapter foundation
-are implemented; catalog browsing, playback, networking, and persistence are
-not yet implemented.
+Pre-alpha. Home, the durable Application Module/terminal adapter foundation,
+the fixed Demo catalog, and Listening-intent browsing are implemented. Search,
+playback, Queue management, networking, and persistence are not yet implemented.

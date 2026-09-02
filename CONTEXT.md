@@ -17,7 +17,7 @@ The provenance attached to music content and displayed when relevant. A source m
 _Avoid_: Provider
 
 **Listening intent**:
-The state or purpose guiding what a Listener wants to hear, such as Deep Work, Calm, Energy, or Reset.
+The state or purpose guiding what a Listener wants to hear, such as Deep Work, Calm, Energy, or Reset. The interface groups these choices under Mood & activity without using that label as the domain name.
 _Avoid_: Mood, activity, collection
 
 **Track**:
