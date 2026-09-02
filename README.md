@@ -9,9 +9,11 @@ independent of where the music comes from.
 Songdial is in pre-alpha. The Rust and Ratatui application opens directly on
 Home and includes its first complete browse journey: Mood & activity leads to
 six choices for what fits right now, matching Stations and Playlists, and
-read-only details from a deterministic fictional Demo catalog. The remaining
-Home choices stay as explicit placeholder Destinations while later Search and
-playback work remains intentionally out of scope.
+read-only details from a deterministic fictional Demo catalog. Tracks,
+Playlists, and Stations can start silent simulated Playback sessions with
+persistent Now Playing state. The remaining Home choices stay as explicit
+placeholder Destinations while later Search and Queue-management work remains
+intentionally out of scope.
 
 ## Build and run
 
@@ -42,6 +44,9 @@ complete command-line surface.
 - `↑`/`k` and `↓`/`j` move selection and scroll long lists.
 - `Enter` opens the selected choice, Station, or Playlist without starting
   playback.
+- `p` starts the selected Track, Playlist, or Station as a new simulated
+  Playback session.
+- `Space` pauses or resumes playback and restarts a retained stopped Track.
 - `Esc` restores the previous Destination's exact selection and scroll position.
 - `?` opens contextual help.
 - `q` or `Ctrl+C` quits.
@@ -65,5 +70,6 @@ cargo test --locked
 ## Status
 
 Pre-alpha. Home, the durable Application Module/terminal adapter foundation,
-the fixed Demo catalog, and Listening-intent browsing are implemented. Search,
-playback, Queue management, networking, and persistence are not yet implemented.
+the fixed Demo catalog, Mood & activity browsing, and deterministic simulated
+Playback sessions are implemented. Search, interactive Queue management,
+networking, and persistence are not yet implemented.

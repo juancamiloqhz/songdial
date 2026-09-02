@@ -10,7 +10,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
-use songdial::{Application, Effect, Event, Key, Viewport};
+use songdial::{Application, Effect, Event, Key, PlaybackRequestId, Viewport};
 
 const TICK_RATE: Duration = Duration::from_secs(1);
 
@@ -21,6 +21,7 @@ pub fn run(_no_motion: bool) -> io::Result<()> {
     let size = terminal.size()?;
     let mut application = Application::new(Viewport::new(size.width, size.height));
     let mut next_tick = Instant::now() + TICK_RATE;
+    let mut pending_playback_load = None;
 
     loop {
         terminal.draw(|frame| frame.buffer_mut().merge(&application.render()))?;
@@ -39,15 +40,26 @@ pub fn run(_no_motion: bool) -> io::Result<()> {
                 _ => None,
             };
 
-            if application_event
-                .is_some_and(|event| application.handle_event(event) == Effect::Quit)
-            {
+            if application_event.is_some_and(|event| {
+                apply_effect(application.handle_event(event), &mut pending_playback_load)
+            }) {
                 break;
             }
         }
 
         if Instant::now() >= next_tick {
-            if application.handle_event(Event::Tick) == Effect::Quit {
+            if apply_effect(
+                application.handle_event(Event::Tick),
+                &mut pending_playback_load,
+            ) {
+                break;
+            }
+            if let Some(request_id) = pending_playback_load.take()
+                && apply_effect(
+                    application.handle_event(Event::PlaybackLoaded(request_id)),
+                    &mut pending_playback_load,
+                )
+            {
                 break;
             }
             next_tick = Instant::now() + TICK_RATE;
@@ -55,6 +67,17 @@ pub fn run(_no_motion: bool) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+fn apply_effect(effect: Effect, pending_playback_load: &mut Option<PlaybackRequestId>) -> bool {
+    match effect {
+        Effect::None => false,
+        Effect::Quit => true,
+        Effect::LoadPlayback(request) => {
+            *pending_playback_load = Some(request.id());
+            false
+        }
+    }
 }
 
 fn translate_key(key: KeyEvent) -> Option<Key> {

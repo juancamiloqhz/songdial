@@ -162,7 +162,7 @@ fn help_lists_global_and_destination_keys_without_losing_context() {
     application.handle_event(Event::Key(Key::Char('?')));
     let help = lines(&application.render());
     let help_excerpt =
-        [0, 2, 4, 5, 6, 7, 8, 9, 10, 12, 20, 22].map(|row| help[row].trim_end().to_owned());
+        [0, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 20, 22].map(|row| help[row].trim_end().to_owned());
 
     application.handle_event(Event::Key(Key::Escape));
     let restored = lines(&application.render());
@@ -176,10 +176,11 @@ fn help_lists_global_and_destination_keys_without_losing_context() {
                 "  ↑ / k    Move selection up".to_owned(),
                 "  ↓ / j    Move selection down".to_owned(),
                 "  Enter    Open without playing".to_owned(),
+                "  p        Start a new Playback session".to_owned(),
+                "  Space    Pause, resume, or restart".to_owned(),
                 "  Esc      Go back or close help".to_owned(),
                 "  ?        Show contextual help".to_owned(),
-                "  q        Quit".to_owned(),
-                "  Ctrl+C   Quit immediately".to_owned(),
+                "  q / Ctrl+C  Quit".to_owned(),
                 "  This Destination has no additional actions yet.".to_owned(),
                 " NOW PLAYING  Nothing playing".to_owned(),
                 " Esc close  ? close  q quit".to_owned(),
@@ -205,7 +206,11 @@ fn quit_keys_expose_a_runtime_effect_from_every_context() {
             destination.handle_event(Event::Key(Key::Char('q'))),
             help.handle_event(Event::Key(Key::CtrlC)),
         ],
-        [songdial::Effect::Quit; 3]
+        [
+            songdial::Effect::Quit,
+            songdial::Effect::Quit,
+            songdial::Effect::Quit,
+        ]
     );
 }
 
