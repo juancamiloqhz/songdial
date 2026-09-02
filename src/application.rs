@@ -520,7 +520,7 @@ impl Application {
 
             if index == self.current.selection && self.current.active_pane == ActivePane::List {
                 let selected = Self::selected_style();
-                buffer.set_style(Rect::new(2, row, 76, 2), selected);
+                buffer.set_style(Rect::new(2, row, 78, 2), selected);
             }
         }
 
