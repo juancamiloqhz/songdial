@@ -6,7 +6,7 @@ use std::{
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
-fn assert_home_and_restoration_after(quit_key: &[u8]) {
+fn assert_home_and_restoration_after(quit_key: &[u8], no_color: bool) {
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -21,6 +21,9 @@ fn assert_home_and_restoration_after(quit_key: &[u8]) {
     let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_songdial"));
     command.arg("--no-motion");
     command.env("TERM", "xterm-256color");
+    if no_color {
+        command.env("NO_COLOR", "1");
+    }
     let mut child = pair
         .slave
         .spawn_command(command)
@@ -108,14 +111,31 @@ fn assert_home_and_restoration_after(quit_key: &[u8]) {
         "PTY output was: {}",
         output.escape_debug()
     );
+    if no_color {
+        assert!(
+            !output.contains("38;2;"),
+            "PTY output was: {}",
+            output.escape_debug()
+        );
+        assert!(
+            !output.contains("48;2;"),
+            "PTY output was: {}",
+            output.escape_debug()
+        );
+    }
 }
 
 #[test]
 fn real_binary_shows_home_quits_and_restores_the_terminal() {
-    assert_home_and_restoration_after(b"q");
+    assert_home_and_restoration_after(b"q", false);
 }
 
 #[test]
 fn control_c_exits_immediately_and_restores_the_terminal() {
-    assert_home_and_restoration_after(b"\x03");
+    assert_home_and_restoration_after(b"\x03", false);
+}
+
+#[test]
+fn no_color_reaches_the_application_without_emitting_rgb_sequences() {
+    assert_home_and_restoration_after(b"q", true);
 }

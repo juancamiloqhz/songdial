@@ -5,6 +5,8 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
 };
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
     Availability, CatalogId, DemoCatalog,
@@ -33,18 +35,23 @@ impl HomeChoice {
         match self {
             Self::ListeningIntents => HomeChoiceText {
                 label: "Mood & activity",
+                detail: "Start from a Listening intent before choosing a Source.",
             },
             Self::Stations => HomeChoiceText {
                 label: "Radio stations",
+                detail: "Browse continuous Stations from every Source.",
             },
             Self::Playlists => HomeChoiceText {
                 label: "My playlists",
+                detail: "Browse personal and saved Playlists in one place.",
             },
             Self::Services => HomeChoiceText {
                 label: "Browse services",
+                detail: "Deliberately enter one fictional Service catalog.",
             },
             Self::Search => HomeChoiceText {
                 label: "Search everything",
+                detail: "Search every Source while keeping results grouped.",
             },
         }
     }
@@ -52,6 +59,13 @@ impl HomeChoice {
 
 struct HomeChoiceText {
     label: &'static str,
+    detail: &'static str,
+}
+
+struct DetailLensContent {
+    kind: &'static str,
+    title: String,
+    facts: Vec<String>,
 }
 
 struct DenseCatalogRow<'a> {
@@ -63,7 +77,7 @@ struct DenseCatalogRow<'a> {
     source_id: &'a CatalogId,
     detail: &'a str,
     availability: &'a Availability,
-    status: &'static str,
+    status: &'a str,
 }
 
 type QueueAddition = Result<(Vec<CatalogId>, String), String>;
@@ -79,7 +93,7 @@ struct ServiceCatalogItemProjection<'a> {
     source_id: &'a CatalogId,
     detail: String,
     availability: &'a Availability,
-    status: &'static str,
+    status: String,
 }
 
 impl ServiceCatalogItemProjection<'_> {
@@ -131,6 +145,28 @@ impl Viewport {
     #[must_use]
     pub const fn new(width: u16, height: u16) -> Self {
         Self { width, height }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ApplicationOptions {
+    color_enabled: bool,
+    motion_enabled: bool,
+}
+
+impl ApplicationOptions {
+    #[must_use]
+    pub const fn new(color_enabled: bool, motion_enabled: bool) -> Self {
+        Self {
+            color_enabled,
+            motion_enabled,
+        }
+    }
+}
+
+impl Default for ApplicationOptions {
+    fn default() -> Self {
+        Self::new(true, true)
     }
 }
 
@@ -286,6 +322,7 @@ impl DestinationSnapshot {
 
 pub struct Application {
     viewport: Viewport,
+    options: ApplicationOptions,
     catalog: DemoCatalog,
     current: DestinationSnapshot,
     history: Vec<DestinationSnapshot>,
@@ -294,6 +331,7 @@ pub struct Application {
     pending_playback: Option<PendingPlayback>,
     playback_feedback: Option<PlaybackFeedback>,
     next_playback_request_id: u64,
+    motion_frame: u8,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -386,13 +424,32 @@ enum PlaybackStartOutcome {
 impl Application {
     #[must_use]
     pub fn new(viewport: Viewport) -> Self {
-        Self::with_catalog(viewport, DemoCatalog::fixed())
+        Self::with_catalog_and_options(
+            viewport,
+            DemoCatalog::fixed(),
+            ApplicationOptions::default(),
+        )
+    }
+
+    #[must_use]
+    pub fn with_options(viewport: Viewport, options: ApplicationOptions) -> Self {
+        Self::with_catalog_and_options(viewport, DemoCatalog::fixed(), options)
     }
 
     #[must_use]
     pub fn with_catalog(viewport: Viewport, catalog: DemoCatalog) -> Self {
+        Self::with_catalog_and_options(viewport, catalog, ApplicationOptions::default())
+    }
+
+    #[must_use]
+    pub fn with_catalog_and_options(
+        viewport: Viewport,
+        catalog: DemoCatalog,
+        options: ApplicationOptions,
+    ) -> Self {
         Self {
             viewport,
+            options,
             catalog,
             current: DestinationSnapshot::new(Destination::Home),
             history: Vec::new(),
@@ -401,22 +458,38 @@ impl Application {
             pending_playback: None,
             playback_feedback: None,
             next_playback_request_id: 1,
+            motion_frame: 0,
         }
     }
 
     pub fn handle_event(&mut self, event: Event) -> Effect {
+        if let Event::Resize(viewport) = event {
+            self.viewport = viewport;
+            return Effect::None;
+        }
+
+        if !self.viewport.is_supported() {
+            return match event {
+                Event::Key(Key::Char('q') | Key::CtrlC) => Effect::Quit,
+                Event::Key(_)
+                | Event::Tick
+                | Event::PlaybackLoaded(_)
+                | Event::PlaybackFailed { .. } => Effect::None,
+                Event::Resize(_) => unreachable!("resize events handled above"),
+            };
+        }
+
         let Event::Key(key) = event else {
             return match event {
-                Event::Resize(viewport) => {
-                    self.viewport = viewport;
-                    Effect::None
-                }
                 Event::Tick => {
                     if matches!(
                         self.playback_feedback.as_ref(),
                         Some(PlaybackFeedback::Brief(_))
                     ) {
                         self.playback_feedback = None;
+                    }
+                    if self.options.motion_enabled && self.pending_playback.is_some() {
+                        self.motion_frame = (self.motion_frame + 1) % 4;
                     }
                     self.advance_playback_tick();
                     Effect::None
@@ -430,19 +503,12 @@ impl Application {
                     Effect::None
                 }
                 Event::Key(_) => unreachable!("key event handled above"),
+                Event::Resize(_) => unreachable!("resize events handled above"),
             };
         };
 
         if key == Key::CtrlC {
             return Effect::Quit;
-        }
-
-        if !self.viewport.is_supported() {
-            return if key == Key::Char('q') {
-                Effect::Quit
-            } else {
-                Effect::None
-            };
         }
 
         if self.help_visible {
@@ -707,7 +773,7 @@ impl Application {
                 source_id: station.source_id(),
                 detail: station.style().to_owned(),
                 availability: station.availability(),
-                status: Self::availability_label(station.availability()),
+                status: Self::availability_label(station.availability()).to_owned(),
             },
             ServiceCatalogItem::Playlist(playlist) => {
                 let track_count = playlist.track_ids().len();
@@ -736,7 +802,8 @@ impl Application {
                         "EMPTY"
                     } else {
                         Self::availability_label(playlist.availability())
-                    },
+                    }
+                    .to_owned(),
                 }
             }
             ServiceCatalogItem::Track(track) => ServiceCatalogItemProjection {
@@ -759,7 +826,7 @@ impl Application {
                 source_id: track.source_id(),
                 detail: track.creator().to_owned(),
                 availability: track.availability(),
-                status: Self::availability_label(track.availability()),
+                status: Self::track_row_status(track),
             },
         }
     }
@@ -946,6 +1013,7 @@ impl Application {
         };
         self.next_playback_request_id += 1;
         self.playback_feedback = None;
+        self.motion_frame = 0;
         self.pending_playback = Some(PendingPlayback {
             request: request.clone(),
             candidate,
@@ -1159,12 +1227,12 @@ impl Application {
 
     fn keep_selection_visible(&mut self) {
         let visible_items = match &self.current.destination {
-            Destination::ListeningIntent(_) => 7,
-            Destination::Stations => 7,
-            Destination::Playlists => 7,
-            Destination::ServiceCatalog(_) => 7,
-            Destination::Search => 9,
-            Destination::PlaylistDetails { .. } => 13,
+            Destination::ListeningIntent(_) => self.dense_visible_items(),
+            Destination::Stations => self.dense_visible_items(),
+            Destination::Playlists => self.dense_visible_items(),
+            Destination::ServiceCatalog(_) => self.dense_visible_items(),
+            Destination::Search => self.search_visible_items(),
+            Destination::PlaylistDetails { .. } => self.playlist_visible_items(),
             Destination::NowPlaying => self.queue_visible_items(),
             Destination::Home => HomeChoice::ALL.len(),
             Destination::ListeningIntents => self.catalog.listening_intents().len(),
@@ -1325,12 +1393,17 @@ impl Application {
     pub fn render(&self) -> Buffer {
         let area = Rect::new(0, 0, self.viewport.width, self.viewport.height);
         let mut buffer = Buffer::empty(area);
-        let base = Style::default()
-            .fg(Color::Rgb(222, 216, 202))
-            .bg(Color::Rgb(27, 29, 28));
+        let base = if self.options.color_enabled {
+            Style::default()
+                .fg(Color::Rgb(222, 216, 202))
+                .bg(Color::Rgb(27, 29, 28))
+        } else {
+            Style::default()
+        };
         buffer.set_style(area, base);
 
         if !self.viewport.is_supported() {
+            self.render_minimum_size_guard(&mut buffer, base);
             return buffer;
         }
 
@@ -1338,10 +1411,441 @@ impl Application {
             self.render_help(&mut buffer, base);
         } else {
             self.render_destination(&mut buffer, base);
+            self.render_wide_detail_lens(&mut buffer, base);
         }
         self.render_brief_feedback(&mut buffer, base);
 
         buffer
+    }
+
+    fn render_wide_detail_lens(&self, buffer: &mut Buffer, base: Style) {
+        let Some(content) = self.detail_lens_content() else {
+            return;
+        };
+        let Some(separator_column) = self.wide_detail_separator_column() else {
+            return;
+        };
+        let top = 1;
+        let height = self.now_playing_top().saturating_sub(top);
+        let detail_area = Rect::new(
+            separator_column,
+            top,
+            self.viewport.width.saturating_sub(separator_column),
+            height,
+        );
+        buffer.set_style(detail_area, base);
+        let blank = " ".repeat(usize::from(detail_area.width));
+        for row in top..self.now_playing_top() {
+            buffer.set_string(separator_column, row, &blank, base);
+            buffer.set_string(separator_column, row, "│", base);
+        }
+
+        let text_column = separator_column + 2;
+        let text_width = self.viewport.width.saturating_sub(text_column + 1);
+        Self::render_detail_line(
+            buffer,
+            text_column,
+            2,
+            text_width,
+            "DETAIL LENS / READ ONLY",
+            base,
+        );
+        Self::render_detail_line(buffer, text_column, 4, text_width, content.kind, base);
+        Self::render_detail_line(buffer, text_column, 5, text_width, &content.title, base);
+        for (index, fact) in content.facts.iter().enumerate() {
+            let row = 7 + index as u16;
+            if row >= self.now_playing_top() {
+                break;
+            }
+            Self::render_detail_line(buffer, text_column, row, text_width, fact, base);
+        }
+    }
+
+    fn render_detail_line(
+        buffer: &mut Buffer,
+        column: u16,
+        row: u16,
+        width: u16,
+        text: &str,
+        style: Style,
+    ) {
+        buffer.set_string(
+            column,
+            row,
+            truncate_with_ellipsis(text, usize::from(width)),
+            style,
+        );
+    }
+
+    fn detail_lens_content(&self) -> Option<DetailLensContent> {
+        match &self.current.destination {
+            Destination::Home => {
+                let selected = self.selected_home_choice().text();
+                Some(DetailLensContent {
+                    kind: "DESTINATION",
+                    title: selected.label.to_owned(),
+                    facts: vec![
+                        selected.detail.to_owned(),
+                        String::new(),
+                        "Enter still opens the same Destination.".to_owned(),
+                    ],
+                })
+            }
+            Destination::ListeningIntents => {
+                let Some(intent) = self.catalog.listening_intents().get(self.current.selection)
+                else {
+                    return Some(Self::empty_lens(
+                        "EMPTY",
+                        "No Listening intents",
+                        "Nothing is available in this catalog.",
+                        "Return Home and choose another path.",
+                    ));
+                };
+                Some(DetailLensContent {
+                    kind: "LISTENING INTENT",
+                    title: intent.name().to_owned(),
+                    facts: vec![
+                        format!(
+                            "{} Stations • {} Playlists",
+                            intent.station_ids().len(),
+                            intent.playlist_ids().len()
+                        ),
+                        "Source  Songdial curation".to_owned(),
+                        String::new(),
+                        intent.description().to_owned(),
+                        String::new(),
+                        "Enter opens this listening direction.".to_owned(),
+                    ],
+                })
+            }
+            Destination::Stations => {
+                let Some(station) = self.catalog.stations().get(self.current.selection) else {
+                    return Some(Self::empty_lens(
+                        "EMPTY",
+                        "No Stations",
+                        "No continuous Stations are available.",
+                        "Return Home and choose another path.",
+                    ));
+                };
+                Some(self.station_lens("STATION", station))
+            }
+            Destination::Playlists => {
+                let Some(playlist) = self.catalog.playlists().get(self.current.selection) else {
+                    return Some(Self::empty_lens(
+                        "EMPTY",
+                        "No Playlists",
+                        "No personal or saved Playlists are available.",
+                        "Return Home and choose another path.",
+                    ));
+                };
+                Some(self.playlist_lens("PLAYLIST", playlist))
+            }
+            Destination::Services => {
+                let Some(service) = self.catalog.services().get(self.current.selection) else {
+                    return Some(Self::empty_lens(
+                        "EMPTY",
+                        "No Services",
+                        "No Service catalogs are available.",
+                        "Return Home and choose another path.",
+                    ));
+                };
+                let counts = self.catalog.service_catalog(service.id()).counts;
+                Some(DetailLensContent {
+                    kind: "SERVICE",
+                    title: service.name().to_owned(),
+                    facts: vec![
+                        format!("Source  [{}]", service.badge()),
+                        format!("{} Stations", counts.stations),
+                        format!("{} Playlists", counts.playlists),
+                        format!("{} Tracks", counts.tracks),
+                        String::new(),
+                        "Enter keeps Songdial navigation and keys.".to_owned(),
+                    ],
+                })
+            }
+            Destination::ListeningIntent(intent_id) => {
+                let matches = self.catalog.intent_matches(intent_id);
+                let Some(intent_match) = matches.get(self.current.selection) else {
+                    let intent = self.catalog.listening_intent(intent_id)?;
+                    return Some(Self::empty_lens(
+                        "LISTENING INTENT",
+                        intent.name(),
+                        "No matches in the Demo catalog.",
+                        "Return to Mood & activity and choose another direction.",
+                    ));
+                };
+                match intent_match {
+                    IntentMatch::Station(station) => Some(self.station_lens("STATION", station)),
+                    IntentMatch::Playlist(playlist) => {
+                        Some(self.playlist_lens("PLAYLIST", playlist))
+                    }
+                }
+            }
+            Destination::ServiceCatalog(service_id) => {
+                let catalog = self.catalog.service_catalog(service_id);
+                let Some(item) = catalog.items.get(self.current.selection) else {
+                    let service = self.catalog.service(service_id)?;
+                    return Some(Self::empty_lens(
+                        "EMPTY",
+                        service.name(),
+                        "No catalog items are available.",
+                        "Return to Browse services and choose another Source.",
+                    ));
+                };
+                match item {
+                    ServiceCatalogItem::Station(station) => {
+                        Some(self.station_lens("STATION", station))
+                    }
+                    ServiceCatalogItem::Playlist(playlist) => {
+                        Some(self.playlist_lens("PLAYLIST", playlist))
+                    }
+                    ServiceCatalogItem::Track(track) => Some(self.track_lens("TRACK", track)),
+                }
+            }
+            Destination::Search => {
+                let results = self.catalog.search(&self.current.query);
+                let Some(result) = results.items.get(self.current.selection) else {
+                    return if self.current.query.trim().is_empty() {
+                        Some(Self::empty_lens(
+                            "SEARCH",
+                            "Start typing",
+                            "Search every Source in the Demo catalog.",
+                            "Type a query to reveal grouped results.",
+                        ))
+                    } else {
+                        Some(Self::empty_lens(
+                            "EMPTY",
+                            "No results",
+                            &format!("Nothing matched “{}”.", self.current.query),
+                            "Edit the query to try another title, creator, or Source.",
+                        ))
+                    };
+                };
+                match result {
+                    SearchResult::ListeningIntent(intent) => Some(DetailLensContent {
+                        kind: "LISTENING INTENT",
+                        title: intent.name().to_owned(),
+                        facts: vec![
+                            "Source  Songdial curation".to_owned(),
+                            format!(
+                                "{} Stations • {} Playlists",
+                                intent.station_ids().len(),
+                                intent.playlist_ids().len()
+                            ),
+                            String::new(),
+                            intent.description().to_owned(),
+                            String::new(),
+                            "Enter opens without playing.".to_owned(),
+                        ],
+                    }),
+                    SearchResult::Station(station) => Some(self.station_lens("STATION", station)),
+                    SearchResult::Playlist(playlist) => {
+                        Some(self.playlist_lens("PLAYLIST", playlist))
+                    }
+                    SearchResult::Track(track) => Some(self.track_lens("TRACK", track)),
+                }
+            }
+            Destination::PlaylistDetails { playlist_id, .. } => {
+                let tracks = self.catalog.playlist_tracks(playlist_id);
+                if let Some(track) = tracks.get(self.current.selection) {
+                    Some(self.track_lens("TRACK", track))
+                } else {
+                    self.catalog
+                        .playlist(playlist_id)
+                        .map(|playlist| self.playlist_lens("PLAYLIST", playlist))
+                }
+            }
+            Destination::NowPlaying => {
+                if let Some(PlaybackSession::Track { queue, .. }) = &self.playback
+                    && let Some(track_id) = queue.get(self.current.selection)
+                    && let Some(track) = self.catalog.track(track_id)
+                {
+                    return Some(self.track_lens("QUEUED TRACK", track));
+                }
+                match &self.playback {
+                    Some(PlaybackSession::Station { station_id, state }) => {
+                        self.catalog.station(station_id).map(|station| {
+                            let mut lens = self.station_lens("CURRENT STATION", station);
+                            lens.facts.insert(
+                                3,
+                                format!(
+                                    "Playback  {}",
+                                    match state {
+                                        StationPlaybackState::Live => "LIVE",
+                                        StationPlaybackState::Paused => "LIVE • PAUSED",
+                                    }
+                                ),
+                            );
+                            lens
+                        })
+                    }
+                    Some(PlaybackSession::Track {
+                        current_track_id,
+                        state,
+                        ..
+                    }) => self.catalog.track(current_track_id).map(|track| {
+                        let mut lens = self.track_lens("CURRENT TRACK", track);
+                        lens.facts.insert(
+                            4,
+                            format!(
+                                "Playback  {}",
+                                match state {
+                                    TrackPlaybackState::Playing => "PLAYING",
+                                    TrackPlaybackState::Paused => "PAUSED",
+                                    TrackPlaybackState::Stopped => "STOPPED",
+                                }
+                            ),
+                        );
+                        lens
+                    }),
+                    None => Some(DetailLensContent {
+                        kind: "QUEUE",
+                        title: "Nothing playing".to_owned(),
+                        facts: vec![
+                            "Queue empty".to_owned(),
+                            String::new(),
+                            "Start a Track or Playlist, then add Tracks.".to_owned(),
+                        ],
+                    }),
+                }
+            }
+            Destination::StationDetails { .. } | Destination::TrackDetails { .. } => None,
+        }
+    }
+
+    fn station_lens(&self, kind: &'static str, station: &Station) -> DetailLensContent {
+        let mut facts = vec![
+            format!("Style  {}", station.style()),
+            format!(
+                "Source  {} [{}]",
+                self.catalog.source_name(station.source_id()),
+                self.catalog.source_badge(station.source_id())
+            ),
+            format!(
+                "Status  {}",
+                Self::availability_label(station.availability())
+            ),
+        ];
+        if let Availability::Unavailable(reason) = station.availability() {
+            facts.push(reason.clone());
+        }
+        facts.extend([
+            String::new(),
+            station.description().to_owned(),
+            String::new(),
+            "Enter opens details without playing.".to_owned(),
+        ]);
+        DetailLensContent {
+            kind,
+            title: station.name().to_owned(),
+            facts,
+        }
+    }
+
+    fn empty_lens(
+        kind: &'static str,
+        title: &str,
+        explanation: &str,
+        recovery: &str,
+    ) -> DetailLensContent {
+        DetailLensContent {
+            kind,
+            title: title.to_owned(),
+            facts: vec![explanation.to_owned(), String::new(), recovery.to_owned()],
+        }
+    }
+
+    fn playlist_lens(&self, kind: &'static str, playlist: &Playlist) -> DetailLensContent {
+        DetailLensContent {
+            kind,
+            title: playlist.name().to_owned(),
+            facts: vec![
+                format!("{} Tracks", playlist.track_ids().len()),
+                format!(
+                    "Source  {} [{}]",
+                    self.catalog.source_name(playlist.source_id()),
+                    self.catalog.source_badge(playlist.source_id())
+                ),
+                format!(
+                    "Status  {}",
+                    if playlist.track_ids().is_empty() {
+                        "EMPTY"
+                    } else {
+                        Self::availability_label(playlist.availability())
+                    }
+                ),
+                String::new(),
+                playlist.description().to_owned(),
+                String::new(),
+                "Enter opens Tracks without playing.".to_owned(),
+            ],
+        }
+    }
+
+    fn track_lens(&self, kind: &'static str, track: &Track) -> DetailLensContent {
+        let mut facts = vec![
+            format!("Creator  {}", track.creator()),
+            format!(
+                "Source  {} [{}]",
+                self.catalog.source_name(track.source_id()),
+                self.catalog.source_badge(track.source_id())
+            ),
+            format!(
+                "Duration  {}",
+                Self::format_duration(track.duration_seconds())
+            ),
+            format!("Status  {}", Self::availability_label(track.availability())),
+        ];
+        if let Availability::Unavailable(reason) = track.availability() {
+            facts.push(reason.clone());
+        }
+        facts.extend([
+            String::new(),
+            "Enter opens details without playing.".to_owned(),
+        ]);
+        DetailLensContent {
+            kind,
+            title: track.name().to_owned(),
+            facts,
+        }
+    }
+
+    fn wide_detail_separator_column(&self) -> Option<u16> {
+        const OUTER_GUTTERS: u16 = 4;
+        const LIST_CONTENT: u16 = 56;
+        const SEPARATOR: u16 = 1;
+        const DETAIL_CONTENT: u16 = 40;
+
+        let usable_content_width = self.viewport.width.saturating_sub(OUTER_GUTTERS);
+        (usable_content_width >= LIST_CONTENT + SEPARATOR + DETAIL_CONTENT)
+            .then_some(LIST_CONTENT + 2)
+    }
+
+    fn render_minimum_size_guard(&self, buffer: &mut Buffer, base: Style) {
+        let start_row = self.viewport.height.saturating_sub(7) / 2;
+        let lines = [
+            (0, "SONGDIAL NEEDS MORE ROOM".to_owned()),
+            (
+                2,
+                format!(
+                    "Current  {}×{} cells",
+                    self.viewport.width, self.viewport.height
+                ),
+            ),
+            (3, "Required 80×24 cells".to_owned()),
+            (5, "Resize to recover the unchanged session.".to_owned()),
+            (6, "q quit".to_owned()),
+        ];
+
+        for (offset, line) in lines {
+            let row = start_row.saturating_add(offset);
+            if row >= self.viewport.height {
+                continue;
+            }
+            let width = u16::try_from(line.chars().count()).unwrap_or(u16::MAX);
+            let column = self.viewport.width.saturating_sub(width) / 2;
+            buffer.set_string(column, row, line, base);
+        }
     }
 
     fn render_brief_feedback(&self, buffer: &mut Buffer, base: Style) {
@@ -1382,8 +1886,17 @@ impl Application {
         }
     }
 
+    fn render_location(&self, buffer: &mut Buffer, location: &str, base: Style) {
+        buffer.set_string(
+            0,
+            0,
+            truncate_middle_with_ellipsis(location, usize::from(self.viewport.width)),
+            base,
+        );
+    }
+
     fn render_home(&self, buffer: &mut Buffer, base: Style) {
-        buffer.set_string(0, 0, " SONGDIAL / HOME", base);
+        self.render_location(buffer, " SONGDIAL / HOME", base);
         buffer.set_string(0, 2, "  CHOOSE WHAT FITS RIGHT NOW", base);
         for (index, choice) in HomeChoice::ALL.iter().enumerate() {
             let label = choice.text().label;
@@ -1404,7 +1917,7 @@ impl Application {
         buffer.set_string(0, self.guide_top(), " ↑/k up  ↓/j down  Enter open", base);
         buffer.set_string(0, self.guide_top() + 1, " n queue  ? help  q quit", base);
 
-        let selected = Self::selected_style();
+        let selected = self.selected_style();
         if self.current.active_pane == ActivePane::List {
             buffer.set_style(
                 Rect::new(2, 4 + self.current.selection as u16, 76, 1),
@@ -1414,9 +1927,15 @@ impl Application {
     }
 
     fn render_listening_intents(&self, buffer: &mut Buffer, base: Style) {
-        buffer.set_string(0, 0, " SONGDIAL / MOOD & ACTIVITY", base);
+        self.render_location(buffer, " SONGDIAL / MOOD & ACTIVITY", base);
         buffer.set_string(0, 2, "  MOOD & ACTIVITY", base);
         buffer.set_string(0, 3, "  Choose what fits right now.", base);
+
+        if self.catalog.listening_intents().is_empty() {
+            buffer.set_string(0, 4, "  0 Listening intents • EMPTY", base);
+            buffer.set_string(0, 7, "  No Listening intents are available.", base);
+            buffer.set_string(0, 8, "  Esc returns Home to choose another path.", base);
+        }
 
         for (index, intent) in self.catalog.listening_intents().iter().enumerate() {
             let line = if index == self.current.selection {
@@ -1428,11 +1947,22 @@ impl Application {
         }
 
         self.render_now_playing(buffer, base);
-        buffer.set_string(0, self.guide_top(), " ↑/k up  ↓/j down  Enter open", base);
-        buffer.set_string(0, self.guide_top() + 1, " n queue  Esc back", base);
+        if self.catalog.listening_intents().is_empty() {
+            buffer.set_string(
+                0,
+                self.guide_top(),
+                " n queue  Esc back  ? help  q quit",
+                base,
+            );
+        } else {
+            buffer.set_string(0, self.guide_top(), " ↑/k up  ↓/j down  Enter open", base);
+            buffer.set_string(0, self.guide_top() + 1, " n queue  Esc back", base);
+        }
 
-        let selected = Self::selected_style();
-        if self.current.active_pane == ActivePane::List {
+        let selected = self.selected_style();
+        if !self.catalog.listening_intents().is_empty()
+            && self.current.active_pane == ActivePane::List
+        {
             buffer.set_style(
                 Rect::new(2, 5 + self.current.selection as u16, 76, 1),
                 selected,
@@ -1446,10 +1976,9 @@ impl Application {
         };
         let matches = self.catalog.intent_matches(intent_id);
 
-        buffer.set_string(
-            0,
-            0,
-            format!(
+        self.render_location(
+            buffer,
+            &format!(
                 " SONGDIAL / MOOD & ACTIVITY / {}",
                 intent.name().to_uppercase()
             ),
@@ -1463,7 +1992,7 @@ impl Application {
             intent.playlist_ids().len()
         );
         if matches.is_empty() {
-            buffer.set_string(0, 4, counts, base);
+            buffer.set_string(0, 4, format!("{counts} • EMPTY"), base);
             buffer.set_string(
                 0,
                 7,
@@ -1492,7 +2021,7 @@ impl Application {
         for (slot, intent_match) in matches
             .iter()
             .skip(self.current.scroll_offset)
-            .take(7)
+            .take(self.dense_visible_items())
             .enumerate()
         {
             let index = self.current.scroll_offset + slot;
@@ -1566,25 +2095,31 @@ impl Application {
 
     fn render_stations(&self, buffer: &mut Buffer, base: Style) {
         let stations = self.catalog.stations();
-        buffer.set_string(0, 0, " SONGDIAL / RADIO STATIONS", base);
+        self.render_location(buffer, " SONGDIAL / RADIO STATIONS", base);
         buffer.set_string(0, 2, "  RADIO STATIONS", base);
         buffer.set_string(0, 3, "  Continuous music from every Source.", base);
-        buffer.set_string(
-            0,
-            4,
-            format!(
-                "  {} Stations • Station {}/{}",
-                stations.len(),
-                self.current.selection + 1,
-                stations.len()
-            ),
-            base,
-        );
+        if stations.is_empty() {
+            buffer.set_string(0, 4, "  0 Stations • EMPTY", base);
+            buffer.set_string(0, 7, "  No Stations are available.", base);
+            buffer.set_string(0, 8, "  Esc returns Home to choose another path.", base);
+        } else {
+            buffer.set_string(
+                0,
+                4,
+                format!(
+                    "  {} Stations • Station {}/{}",
+                    stations.len(),
+                    self.current.selection + 1,
+                    stations.len()
+                ),
+                base,
+            );
+        }
 
         for (slot, station) in stations
             .iter()
             .skip(self.current.scroll_offset)
-            .take(7)
+            .take(self.dense_visible_items())
             .enumerate()
         {
             let index = self.current.scroll_offset + slot;
@@ -1612,25 +2147,35 @@ impl Application {
         }
 
         self.render_now_playing(buffer, base);
-        buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter inspect", base);
-        let selected_is_unavailable = stations
-            .get(self.current.selection)
-            .is_some_and(|station| matches!(station.availability(), Availability::Unavailable(_)));
-        buffer.set_string(
-            0,
-            self.guide_top() + 1,
-            if selected_is_unavailable {
-                " p unavailable  n queue  Esc back"
-            } else {
-                " p play  n queue  Esc back"
-            },
-            base,
-        );
+        if stations.is_empty() {
+            buffer.set_string(
+                0,
+                self.guide_top(),
+                " n queue  Esc back  ? help  q quit",
+                base,
+            );
+        } else {
+            buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter inspect", base);
+            let selected_is_unavailable =
+                stations.get(self.current.selection).is_some_and(|station| {
+                    matches!(station.availability(), Availability::Unavailable(_))
+                });
+            buffer.set_string(
+                0,
+                self.guide_top() + 1,
+                if selected_is_unavailable {
+                    " p unavailable  n queue  Esc back"
+                } else {
+                    " p play  n queue  Esc back"
+                },
+                base,
+            );
+        }
     }
 
     fn render_playlists(&self, buffer: &mut Buffer, base: Style) {
         let playlists = self.catalog.playlists();
-        buffer.set_string(0, 0, " SONGDIAL / MY PLAYLISTS", base);
+        self.render_location(buffer, " SONGDIAL / MY PLAYLISTS", base);
         buffer.set_string(0, 2, "  MY PLAYLISTS", base);
         buffer.set_string(
             0,
@@ -1639,7 +2184,7 @@ impl Application {
             base,
         );
         if playlists.is_empty() {
-            buffer.set_string(0, 4, "  0 Playlists", base);
+            buffer.set_string(0, 4, "  0 Playlists • EMPTY", base);
             buffer.set_string(0, 7, "  No Playlists are saved in the Demo catalog.", base);
             buffer.set_string(
                 0,
@@ -1664,7 +2209,7 @@ impl Application {
         for (slot, playlist) in playlists
             .iter()
             .skip(self.current.scroll_offset)
-            .take(7)
+            .take(self.dense_visible_items())
             .enumerate()
         {
             let index = self.current.scroll_offset + slot;
@@ -1730,7 +2275,7 @@ impl Application {
 
     fn render_services(&self, buffer: &mut Buffer, base: Style) {
         let services = self.catalog.services();
-        buffer.set_string(0, 0, " SONGDIAL / BROWSE SERVICES", base);
+        self.render_location(buffer, " SONGDIAL / BROWSE SERVICES", base);
         buffer.set_string(0, 2, "  BROWSE SERVICES", base);
         buffer.set_string(
             0,
@@ -1738,31 +2283,39 @@ impl Application {
             "  Choose a fictional Service catalog by Source.",
             base,
         );
-        buffer.set_string(
-            0,
-            4,
-            format!(
-                "  {} Services • Service {}/{}",
-                services.len(),
-                self.current.selection + 1,
-                services.len()
-            ),
-            base,
-        );
+        if services.is_empty() {
+            buffer.set_string(0, 4, "  0 Services • EMPTY", base);
+            buffer.set_string(0, 7, "  No Services are available.", base);
+            buffer.set_string(0, 8, "  Esc returns Home to choose another path.", base);
+        } else {
+            buffer.set_string(
+                0,
+                4,
+                format!(
+                    "  {} Services • Service {}/{}",
+                    services.len(),
+                    self.current.selection + 1,
+                    services.len()
+                ),
+                base,
+            );
+        }
 
         for (index, service) in services.iter().enumerate() {
             let selected = index == self.current.selection;
             let state = Self::dense_row_state(selected, false, &Availability::Available);
-            let source = format!("[{}]", service.badge());
             let counts = self.catalog.service_catalog(service.id()).counts;
             let row = 6 + index as u16 * 2;
             buffer.set_string(
                 0,
                 row,
-                format!(
-                    "  {state:<11}{:<10}{:<46}{source:>11}",
+                dense_catalog_line(
+                    self.browser_list_width(),
+                    state,
                     "SERVICE",
-                    service.name()
+                    service.name(),
+                    "CATALOG",
+                    service.badge(),
                 ),
                 base,
             );
@@ -1777,19 +2330,28 @@ impl Application {
             );
             if selected && self.current.active_pane == ActivePane::List {
                 buffer.set_style(
-                    Self::dense_list_selection_area(row, 2),
-                    Self::selected_style(),
+                    self.dense_list_selection_area(row, 2),
+                    self.selected_style(),
                 );
             }
         }
 
         self.render_now_playing(buffer, base);
-        buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter open", base);
-        buffer.set_string(0, self.guide_top() + 1, " n queue  Esc back  ? help", base);
+        if services.is_empty() {
+            buffer.set_string(
+                0,
+                self.guide_top(),
+                " n queue  Esc back  ? help  q quit",
+                base,
+            );
+        } else {
+            buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter open", base);
+            buffer.set_string(0, self.guide_top() + 1, " n queue  Esc back  ? help", base);
+        }
     }
 
     fn render_search(&self, buffer: &mut Buffer, base: Style) {
-        buffer.set_string(0, 0, " SONGDIAL / SEARCH EVERYTHING", base);
+        self.render_location(buffer, " SONGDIAL / SEARCH EVERYTHING", base);
         buffer.set_string(0, 2, "  SEARCH EVERYTHING", base);
         buffer.set_string(
             0,
@@ -1829,7 +2391,7 @@ impl Application {
                 .items
                 .iter()
                 .skip(self.current.scroll_offset)
-                .take(9);
+                .take(self.search_visible_items());
             let mut row = 6;
             let mut previous_group = None;
             for (slot, result) in visible.enumerate() {
@@ -1906,21 +2468,38 @@ impl Application {
         let state = Self::dense_row_state(selected, projection.playing, projection.availability);
         let source = projection
             .source_id
-            .map(|source_id| format!("[{}]", self.catalog.source_badge(source_id)))
-            .unwrap_or_default();
+            .map(|source_id| self.catalog.source_badge(source_id))
+            .unwrap_or("SONGDIAL");
+        let status = match result {
+            SearchResult::ListeningIntent(_) => "CURATED".to_owned(),
+            SearchResult::Station(station) => {
+                Self::availability_label(station.availability()).to_owned()
+            }
+            SearchResult::Playlist(playlist) if playlist.track_ids().is_empty() => {
+                "EMPTY".to_owned()
+            }
+            SearchResult::Playlist(playlist) => {
+                Self::availability_label(playlist.availability()).to_owned()
+            }
+            SearchResult::Track(track) => Self::track_row_status(track),
+        };
         buffer.set_string(
             0,
             row,
-            format!(
-                "  {state:<11}{:<10}{:<44}{source:>11}",
-                projection.kind, projection.title
+            dense_catalog_line(
+                self.browser_list_width(),
+                state,
+                projection.kind,
+                projection.title,
+                &status,
+                source,
             ),
             base,
         );
         if selected {
             buffer.set_style(
-                Self::dense_list_selection_area(row, 1),
-                Self::selected_style(),
+                self.dense_list_selection_area(row, 1),
+                self.selected_style(),
             );
         }
     }
@@ -1933,10 +2512,9 @@ impl Application {
         let service_catalog = self.catalog.service_catalog(service_id);
         let items = service_catalog.items;
         let counts = service_catalog.counts;
-        buffer.set_string(
-            0,
-            0,
-            format!(
+        self.render_location(
+            buffer,
+            &format!(
                 " SONGDIAL / BROWSE SERVICES / {}",
                 service.name().to_uppercase()
             ),
@@ -1949,24 +2527,43 @@ impl Application {
             "  Source-filtered Stations, Playlists, and Tracks.",
             base,
         );
-        buffer.set_string(
-            0,
-            4,
-            format!(
-                "  {} Stations • {} Playlists • {} Tracks • Item {}/{}",
-                counts.stations,
-                counts.playlists,
-                counts.tracks,
-                self.current.selection + 1,
-                items.len()
-            ),
-            base,
-        );
+        if items.is_empty() {
+            buffer.set_string(
+                0,
+                4,
+                format!(
+                    "  {} Stations • {} Playlists • {} Tracks • EMPTY",
+                    counts.stations, counts.playlists, counts.tracks
+                ),
+                base,
+            );
+            buffer.set_string(0, 7, "  No catalog items are available.", base);
+            buffer.set_string(
+                0,
+                8,
+                "  Esc returns to Browse services to choose another Source.",
+                base,
+            );
+        } else {
+            buffer.set_string(
+                0,
+                4,
+                format!(
+                    "  {} Stations • {} Playlists • {} Tracks • Item {}/{}",
+                    counts.stations,
+                    counts.playlists,
+                    counts.tracks,
+                    self.current.selection + 1,
+                    items.len()
+                ),
+                base,
+            );
+        }
 
         for (slot, item) in items
             .iter()
             .skip(self.current.scroll_offset)
-            .take(7)
+            .take(self.dense_visible_items())
             .enumerate()
         {
             let index = self.current.scroll_offset + slot;
@@ -1985,7 +2582,7 @@ impl Application {
                     source_id: projection.source_id,
                     detail: &projection.detail,
                     availability: projection.availability,
-                    status: projection.status,
+                    status: &projection.status,
                 },
             );
         }
@@ -2033,16 +2630,11 @@ impl Application {
             .catalog
             .station(station_id)
             .expect("fixed Station should exist");
-        let status = match station.availability() {
-            Availability::Available => "Available",
-            Availability::Loading => "Loading",
-            Availability::Unavailable(_) => "Unavailable",
-        };
+        let status = Self::availability_label(station.availability());
 
-        buffer.set_string(
-            0,
-            0,
-            format!(" SONGDIAL / {parent} / {}", station.name().to_uppercase()),
+        self.render_location(
+            buffer,
+            &format!(" SONGDIAL / {parent} / {}", station.name().to_uppercase()),
             base,
         );
         buffer.set_string(0, 2, "  STATION", base);
@@ -2122,10 +2714,9 @@ impl Application {
             .expect("fixed Playlist should exist");
         let tracks = self.catalog.playlist_tracks(playlist_id);
 
-        buffer.set_string(
-            0,
-            0,
-            format!(" SONGDIAL / {parent} / {}", playlist.name().to_uppercase()),
+        self.render_location(
+            buffer,
+            &format!(" SONGDIAL / {parent} / {}", playlist.name().to_uppercase()),
             base,
         );
         buffer.set_string(0, 2, "  PLAYLIST", base);
@@ -2142,7 +2733,7 @@ impl Application {
             base,
         );
         if playlist.track_ids().is_empty() {
-            buffer.set_string(0, 6, "  TRACKS • Empty", base);
+            buffer.set_string(0, 6, "  TRACKS • EMPTY", base);
             buffer.set_string(
                 0,
                 8,
@@ -2174,7 +2765,7 @@ impl Application {
         for (slot, track) in tracks
             .iter()
             .skip(self.current.scroll_offset)
-            .take(13)
+            .take(self.playlist_visible_items())
             .enumerate()
         {
             let index = self.current.scroll_offset + slot;
@@ -2187,25 +2778,27 @@ impl Application {
                 }) if current_track_id == track.id()
             );
             let state = Self::dense_row_state(selected, playing, track.availability());
-            let source = format!("[{}]", self.catalog.source_badge(track.source_id()));
             let row = 7 + slot as u16;
+            let status = Self::track_row_status(track);
 
             buffer.set_string(
                 0,
                 row,
-                format!(
-                    "  {state:<11}{:<8}{:<28}{:<20}{source:>11}",
+                dense_catalog_line(
+                    self.browser_list_width(),
+                    state,
                     "TRACK",
                     track.name(),
-                    track.creator()
+                    &status,
+                    self.catalog.source_badge(track.source_id()),
                 ),
                 base,
             );
 
             if selected && self.current.active_pane == ActivePane::List {
                 buffer.set_style(
-                    Self::dense_list_selection_area(row, 1),
-                    Self::selected_style(),
+                    self.dense_list_selection_area(row, 1),
+                    self.selected_style(),
                 );
             }
         }
@@ -2226,7 +2819,7 @@ impl Application {
     }
 
     fn render_now_playing_destination(&self, buffer: &mut Buffer, base: Style) {
-        buffer.set_string(0, 0, " SONGDIAL / NOW PLAYING", base);
+        self.render_location(buffer, " SONGDIAL / NOW PLAYING", base);
         buffer.set_string(0, 2, "  NOW PLAYING & QUEUE", base);
 
         let current = self.playback.as_ref().map_or_else(
@@ -2308,23 +2901,25 @@ impl Application {
                 let index = self.current.scroll_offset + slot;
                 let selected = index == self.current.selection;
                 let state = Self::dense_row_state(selected, false, track.availability());
-                let source = format!("[{}]", self.catalog.source_badge(track.source_id()));
                 let row = 6 + slot as u16;
+                let status = Self::track_row_status(track);
                 buffer.set_string(
                     0,
                     row,
-                    format!(
-                        "  {state:<11}{:<8}{:<28}{:<20}{source:>11}",
+                    dense_catalog_line(
+                        self.browser_list_width(),
+                        state,
                         "TRACK",
                         track.name(),
-                        track.creator()
+                        &status,
+                        self.catalog.source_badge(track.source_id()),
                     ),
                     base,
                 );
                 if selected && self.current.active_pane == ActivePane::List {
                     buffer.set_style(
-                        Self::dense_list_selection_area(row, 1),
-                        Self::selected_style(),
+                        self.dense_list_selection_area(row, 1),
+                        self.selected_style(),
                     );
                 }
             }
@@ -2366,15 +2961,10 @@ impl Application {
             TrackDetailsOrigin::Search => "SEARCH EVERYTHING".to_owned(),
             TrackDetailsOrigin::Queue => "NOW PLAYING".to_owned(),
         };
-        let status = match track.availability() {
-            Availability::Available => "Available",
-            Availability::Loading => "Loading",
-            Availability::Unavailable(_) => "Unavailable",
-        };
-        buffer.set_string(
-            0,
-            0,
-            format!(" SONGDIAL / {parent} / {}", track.name().to_uppercase()),
+        let status = Self::availability_label(track.availability());
+        self.render_location(
+            buffer,
+            &format!(" SONGDIAL / {parent} / {}", track.name().to_uppercase()),
             base,
         );
         buffer.set_string(0, 2, "  TRACK", base);
@@ -2452,9 +3042,9 @@ impl Application {
                 buffer.set_string(
                     0,
                     top + 1,
-                    format!(
-                        "              Loading {}",
-                        self.pending_target_label(pending)
+                    self.pending_target_line(
+                        pending,
+                        &format!("              {} ", self.loading_label()),
                     ),
                     base,
                 );
@@ -2463,9 +3053,9 @@ impl Application {
                 buffer.set_string(
                     0,
                     top,
-                    format!(
-                        " NOW PLAYING  Loading {}",
-                        self.pending_target_label(pending)
+                    self.pending_target_line(
+                        pending,
+                        &format!(" NOW PLAYING  {} ", self.loading_label()),
                     ),
                     base,
                 );
@@ -2483,7 +3073,12 @@ impl Application {
                     top + 1,
                     self.persistent_playback_feedback().map_or_else(
                         || self.playback_detail_line(playback),
-                        |message| format!("              {message}"),
+                        |message| {
+                            truncate_with_ellipsis(
+                                &format!("              ERROR • {message}"),
+                                usize::from(self.viewport.width),
+                            )
+                        },
                     ),
                     base,
                 );
@@ -2495,7 +3090,12 @@ impl Application {
                     top + 1,
                     self.persistent_playback_feedback().map_or_else(
                         || "              Open a choice to keep exploring.".to_owned(),
-                        |message| format!("              {message}"),
+                        |message| {
+                            truncate_with_ellipsis(
+                                &format!("              ERROR • {message}"),
+                                usize::from(self.viewport.width),
+                            )
+                        },
                     ),
                     base,
                 );
@@ -2510,17 +3110,19 @@ impl Application {
         }
     }
 
-    fn pending_target_label(&self, pending: &PendingPlayback) -> String {
+    fn pending_target_line(&self, pending: &PendingPlayback, prefix: &str) -> String {
         match &pending.request.target {
             PlaybackTarget::Station(station_id) => {
                 let station = self
                     .catalog
                     .station(station_id)
                     .expect("playback request should reference a catalog Station");
-                format!(
-                    "{} [{}]",
+                protected_identity_line(
+                    usize::from(self.viewport.width),
+                    prefix,
                     station.name(),
-                    self.catalog.source_badge(station.source_id())
+                    self.catalog.source_badge(station.source_id()),
+                    "",
                 )
             }
             PlaybackTarget::Track(track_id) => {
@@ -2528,10 +3130,12 @@ impl Application {
                     .catalog
                     .track(track_id)
                     .expect("playback request should reference a catalog Track");
-                format!(
-                    "{} [{}]",
+                protected_identity_line(
+                    usize::from(self.viewport.width),
+                    prefix,
                     track.name(),
-                    self.catalog.source_badge(track.source_id())
+                    self.catalog.source_badge(track.source_id()),
+                    "",
                 )
             }
         }
@@ -2544,14 +3148,18 @@ impl Application {
                     .catalog
                     .station(station_id)
                     .expect("playback session should reference a catalog Station");
-                format!(
-                    " NOW PLAYING  {} [{}] • {}",
+                protected_identity_line(
+                    usize::from(self.viewport.width),
+                    " NOW PLAYING  ",
                     station.name(),
                     self.catalog.source_badge(station.source_id()),
-                    match state {
-                        StationPlaybackState::Live => "LIVE",
-                        StationPlaybackState::Paused => "LIVE • PAUSED",
-                    }
+                    &format!(
+                        " • {}",
+                        match state {
+                            StationPlaybackState::Live => "LIVE",
+                            StationPlaybackState::Paused => "LIVE • PAUSED",
+                        }
+                    ),
                 )
             }
             PlaybackSession::Track {
@@ -2564,17 +3172,21 @@ impl Application {
                     .catalog
                     .track(current_track_id)
                     .expect("playback session should reference a catalog Track");
-                format!(
-                    " NOW PLAYING  {} [{}] • {} • {}/{}",
+                protected_identity_line(
+                    usize::from(self.viewport.width),
+                    " NOW PLAYING  ",
                     track.name(),
                     self.catalog.source_badge(track.source_id()),
-                    match state {
-                        TrackPlaybackState::Playing => "PLAYING",
-                        TrackPlaybackState::Paused => "PAUSED",
-                        TrackPlaybackState::Stopped => "STOPPED",
-                    },
-                    Self::format_duration(*elapsed_seconds),
-                    Self::format_duration(track.duration_seconds())
+                    &format!(
+                        " • {} • {}/{}",
+                        match state {
+                            TrackPlaybackState::Playing => "PLAYING",
+                            TrackPlaybackState::Paused => "PAUSED",
+                            TrackPlaybackState::Stopped => "STOPPED",
+                        },
+                        Self::format_duration(*elapsed_seconds),
+                        Self::format_duration(track.duration_seconds())
+                    ),
                 )
             }
         }
@@ -2622,7 +3234,7 @@ impl Application {
                 .track(track_id)
                 .map_or("TRACK", |track| track.name()),
         };
-        buffer.set_string(0, 0, format!(" SONGDIAL / {destination} / HELP"), base);
+        self.render_location(buffer, &format!(" SONGDIAL / {destination} / HELP"), base);
         buffer.set_string(0, 2, "  COMPLETE KEY GUIDE", base);
         buffer.set_string(0, 4, "  ↑ / k    Move selection up", base);
         buffer.set_string(0, 5, "  ↓ / j    Move selection down", base);
@@ -2691,6 +3303,18 @@ impl Application {
         usize::from(self.viewport.height.saturating_sub(10))
     }
 
+    fn dense_visible_items(&self) -> usize {
+        usize::from(self.now_playing_top().saturating_sub(6) / 2)
+    }
+
+    fn playlist_visible_items(&self) -> usize {
+        usize::from(self.now_playing_top().saturating_sub(7))
+    }
+
+    fn search_visible_items(&self) -> usize {
+        usize::from(self.now_playing_top().saturating_sub(11))
+    }
+
     fn selected_home_choice(&self) -> HomeChoice {
         HomeChoice::ALL[self.current.selection]
     }
@@ -2730,39 +3354,222 @@ impl Application {
         }
     }
 
+    fn track_row_status(track: &Track) -> String {
+        match track.availability() {
+            Availability::Available => Self::format_duration(track.duration_seconds()),
+            Availability::Loading => "LOADING".to_owned(),
+            Availability::Unavailable(_) => "UNAVAIL".to_owned(),
+        }
+    }
+
     fn render_dense_catalog_row(&self, buffer: &mut Buffer, base: Style, row: DenseCatalogRow<'_>) {
         let state = Self::dense_row_state(row.selected, row.playing, row.availability);
-        let source = format!("[{}]", self.catalog.source_badge(row.source_id));
-        buffer.set_string(
-            0,
-            row.row,
-            format!("  {state:<11}{:<10}{:<46}{source:>11}", row.kind, row.title),
-            base,
+        let line = dense_catalog_line(
+            self.browser_list_width(),
+            state,
+            row.kind,
+            row.title,
+            row.status,
+            self.catalog.source_badge(row.source_id),
         );
+        buffer.set_string(0, row.row, line, base);
         buffer.set_string(
             0,
             row.row + 1,
-            format!("             {} • {}", row.detail, row.status),
+            truncate_with_ellipsis(
+                &format!("             {} • {}", row.detail, row.status),
+                usize::from(self.browser_list_width()),
+            ),
             base,
         );
         if row.selected && self.current.active_pane == ActivePane::List {
             buffer.set_style(
-                Self::dense_list_selection_area(row.row, 2),
-                Self::selected_style(),
+                self.dense_list_selection_area(row.row, 2),
+                self.selected_style(),
             );
         }
     }
 
-    fn selected_style() -> Style {
-        Style::default()
-            .fg(Color::Rgb(27, 29, 28))
-            .bg(Color::Rgb(214, 166, 75))
-            .add_modifier(Modifier::BOLD)
+    fn selected_style(&self) -> Style {
+        if self.options.color_enabled {
+            Style::default()
+                .fg(Color::Rgb(27, 29, 28))
+                .bg(Color::Rgb(214, 166, 75))
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
+        }
     }
 
-    const fn dense_list_selection_area(row: u16, height: u16) -> Rect {
-        Rect::new(2, row, 78, height)
+    fn loading_label(&self) -> &'static str {
+        if !self.options.motion_enabled {
+            return "Loading";
+        }
+        match self.motion_frame {
+            0 => "Loading",
+            1 => "Loading ·",
+            2 => "Loading ··",
+            _ => "Loading ···",
+        }
     }
+
+    fn dense_list_selection_area(&self, row: u16, height: u16) -> Rect {
+        Rect::new(2, row, self.browser_list_width().saturating_sub(2), height)
+    }
+
+    fn browser_list_width(&self) -> u16 {
+        self.wide_detail_separator_column()
+            .unwrap_or(self.viewport.width)
+    }
+}
+
+fn dense_catalog_line(
+    width: u16,
+    state: &str,
+    kind: &str,
+    title: &str,
+    status: &str,
+    source_badge: &str,
+) -> String {
+    const LEADING_WIDTH: usize = 2;
+    const STATE_WIDTH: usize = 11;
+    const KIND_WIDTH: usize = 10;
+    const STATUS_WIDTH: usize = 10;
+    const SOURCE_WIDTH: usize = 11;
+
+    let width = usize::from(width);
+    let fixed_width = LEADING_WIDTH + STATE_WIDTH + KIND_WIDTH + STATUS_WIDTH + SOURCE_WIDTH;
+    let title_width = width.saturating_sub(fixed_width);
+    let source = bracketed_source_badge(source_badge);
+
+    [
+        "  ".to_owned(),
+        fit_left(state, STATE_WIDTH),
+        fit_left(kind, KIND_WIDTH),
+        fit_left(title, title_width),
+        fit_right(status, STATUS_WIDTH),
+        fit_right(&source, SOURCE_WIDTH),
+    ]
+    .concat()
+}
+
+fn protected_identity_line(
+    width: usize,
+    prefix: &str,
+    title: &str,
+    source_badge: &str,
+    suffix: &str,
+) -> String {
+    let source = format!(" {}", bracketed_source_badge(source_badge));
+    let fixed_width = UnicodeWidthStr::width(prefix)
+        + UnicodeWidthStr::width(source.as_str())
+        + UnicodeWidthStr::width(suffix);
+    let title_width = width.saturating_sub(fixed_width);
+    format!(
+        "{prefix}{}{source}{suffix}",
+        truncate_with_ellipsis(title, title_width)
+    )
+}
+
+fn bracketed_source_badge(source_badge: &str) -> String {
+    format!("[{}]", truncate_with_ellipsis(source_badge, 9))
+}
+
+fn fit_left(text: &str, width: usize) -> String {
+    let clipped = truncate_with_ellipsis(text, width);
+    let padding = width.saturating_sub(UnicodeWidthStr::width(clipped.as_str()));
+    format!("{clipped}{}", " ".repeat(padding))
+}
+
+fn fit_right(text: &str, width: usize) -> String {
+    let clipped = truncate_with_ellipsis(text, width);
+    let padding = width.saturating_sub(UnicodeWidthStr::width(clipped.as_str()));
+    format!("{}{clipped}", " ".repeat(padding))
+}
+
+fn truncate_with_ellipsis(text: &str, width: usize) -> String {
+    let sanitized = text
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let text = sanitized.as_str();
+    if width == 0 {
+        return String::new();
+    }
+    if UnicodeWidthStr::width(text) <= width {
+        return text.to_owned();
+    }
+
+    let content_width = width.saturating_sub(1);
+    let mut clipped = String::new();
+    let mut used_width = 0;
+    for grapheme in UnicodeSegmentation::graphemes(text, true) {
+        let grapheme_width = UnicodeWidthStr::width(grapheme);
+        if grapheme_width == 0 && clipped.is_empty() {
+            continue;
+        }
+        if used_width + grapheme_width > content_width {
+            break;
+        }
+        clipped.push_str(grapheme);
+        used_width += grapheme_width;
+    }
+    clipped.push('…');
+    clipped
+}
+
+fn truncate_middle_with_ellipsis(text: &str, width: usize) -> String {
+    let sanitized = text
+        .trim_end()
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    if width == 0 {
+        return String::new();
+    }
+    if UnicodeWidthStr::width(sanitized.as_str()) <= width {
+        return sanitized;
+    }
+
+    let content_width = width.saturating_sub(1);
+    let leading_budget = content_width * 2 / 5;
+    let mut leading = String::new();
+    let mut leading_width = 0;
+    for grapheme in UnicodeSegmentation::graphemes(sanitized.as_str(), true) {
+        let grapheme_width = UnicodeWidthStr::width(grapheme);
+        if leading_width + grapheme_width > leading_budget {
+            break;
+        }
+        leading.push_str(grapheme);
+        leading_width += grapheme_width;
+    }
+
+    let trailing_budget = content_width.saturating_sub(leading_width);
+    let mut trailing_graphemes = Vec::new();
+    let mut trailing_width = 0;
+    for grapheme in UnicodeSegmentation::graphemes(sanitized.as_str(), true).rev() {
+        let grapheme_width = UnicodeWidthStr::width(grapheme);
+        if trailing_width + grapheme_width > trailing_budget {
+            break;
+        }
+        trailing_graphemes.push(grapheme);
+        trailing_width += grapheme_width;
+    }
+    trailing_graphemes.reverse();
+
+    format!("{leading}…{}", trailing_graphemes.concat())
 }
 
 impl Viewport {

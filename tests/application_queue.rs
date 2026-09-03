@@ -213,7 +213,7 @@ fn adding_a_selected_station_is_rejected_without_interrupting_playback() {
         (rendered[20].trim_end(), rendered[21].trim_end()),
         (
             " NOW PLAYING  Track One [TEST] • PLAYING • 00:00/00:02",
-            "              Cannot add: Stations are continuous and cannot be queued.",
+            "              ERROR • Cannot add: Stations are continuous and cannot be queued.",
         )
     );
 }
@@ -230,7 +230,7 @@ fn adding_without_a_playback_session_explains_how_to_create_a_queue() {
         (rendered[20].trim_end(), rendered[21].trim_end()),
         (
             " NOW PLAYING  Nothing playing",
-            "              Cannot add: Start a Track or Playlist before building a Queue.",
+            "              ERROR • Cannot add: Start a Track or Playlist before building a Q…",
         )
     );
 }
@@ -251,7 +251,7 @@ fn adding_tracks_while_a_station_is_live_preserves_its_empty_queue() {
         (rendered[20].trim_end(), rendered[21].trim_end()),
         (
             " NOW PLAYING  Test Station [TEST] • LIVE",
-            "              Cannot add: Continuous Stations stay LIVE with an empty Queue.",
+            "              ERROR • Cannot add: Continuous Stations stay LIVE with an empty Q…",
         )
     );
 }
@@ -272,7 +272,7 @@ fn an_unavailable_track_cannot_be_added_and_preserves_its_reason() {
         (rendered[20].trim_end(), rendered[21].trim_end()),
         (
             " NOW PLAYING  Track One [TEST] • PLAYING • 00:00/00:02",
-            "              Cannot add: Unavailable in this fixture.",
+            "              ERROR • Cannot add: Unavailable in this fixture.",
         )
     );
 }
@@ -293,7 +293,7 @@ fn an_empty_playlist_cannot_be_added_and_explains_why() {
         (rendered[20].trim_end(), rendered[21].trim_end()),
         (
             " NOW PLAYING  Track One [TEST] • PLAYING • 00:00/00:02",
-            "              Cannot add: Empty Playlist has no playable Tracks.",
+            "              ERROR • Cannot add: Empty Playlist has no playable Tracks.",
         )
     );
 }
@@ -313,9 +313,9 @@ fn now_playing_opens_as_a_destination_with_the_current_track_and_queue() {
             "  NOW PLAYING & QUEUE",
             "  CURRENT  Track One [TEST] • PLAYING • 00:00/00:02",
             "  QUEUE • 3 Tracks • Track 1/3",
-            "  SELECTED > TRACK   Track Two                   Tester                   [TEST]",
-            "  UNAVAIL !  TRACK   Track Three                 Tester                   [TEST]",
-            "             TRACK   Track Four                  Tester                   [TEST]",
+            "  SELECTED > TRACK     Track Two                                00:02     [TEST]",
+            "  UNAVAIL !  TRACK     Track Three                            UNAVAIL     [TEST]",
+            "             TRACK     Track Four                               00:02     [TEST]",
             " NOW PLAYING  Track One [TEST] • PLAYING • 00:00/00:02",
             "              Queue 3 Tracks",
             " ↑/k ↓/j move  Enter inspect",
@@ -345,7 +345,7 @@ fn queued_track_details_open_without_playback_and_back_restores_the_queue_snapsh
             "  Tester",
             "  Source  Test Source",
             "  Duration  00:02",
-            "  Status  Unavailable",
+            "  Status  UNAVAIL",
             "  Unavailable in this fixture.",
             " NOW PLAYING  Track One [TEST] • PLAYING • 00:00/00:02",
         ]
@@ -370,8 +370,8 @@ fn removing_the_first_queued_track_keeps_the_current_track_playing() {
         [
             "  CURRENT  Track One [TEST] • PLAYING • 00:00/00:02",
             "  QUEUE • 2 Tracks • Track 1/2",
-            "  SEL+UNAV > TRACK   Track Three                 Tester                   [TEST]",
-            "             TRACK   Track Four                  Tester                   [TEST]",
+            "  SEL+UNAV > TRACK     Track Three                            UNAVAIL     [TEST]",
+            "             TRACK     Track Four                               00:02     [TEST]",
             " NOW PLAYING  Track One [TEST] • PLAYING • 00:00/00:02",
             "              Queue 2 Tracks",
             " QUEUE  Removed Track Two from Queue. Queue 2 Tracks",
@@ -394,8 +394,8 @@ fn removing_a_middle_queued_track_selects_the_track_that_followed_it() {
         [5, 6, 7, 21, 22].map(|row| rendered[row].trim_end().to_owned()),
         [
             "  QUEUE • 2 Tracks • Track 2/2",
-            "             TRACK   Track Two                   Tester                   [TEST]",
-            "  SELECTED > TRACK   Track Four                  Tester                   [TEST]",
+            "             TRACK     Track Two                                00:02     [TEST]",
+            "  SELECTED > TRACK     Track Four                               00:02     [TEST]",
             "              Queue 2 Tracks",
             " QUEUE  Removed Track Three from Queue. Queue 2 Tracks",
         ]
@@ -418,8 +418,8 @@ fn removing_the_last_queued_track_moves_selection_to_the_new_last_track() {
         [5, 6, 7, 21, 22].map(|row| rendered[row].trim_end().to_owned()),
         [
             "  QUEUE • 2 Tracks • Track 2/2",
-            "             TRACK   Track Two                   Tester                   [TEST]",
-            "  SEL+UNAV > TRACK   Track Three                 Tester                   [TEST]",
+            "             TRACK     Track Two                                00:02     [TEST]",
+            "  SEL+UNAV > TRACK     Track Three                            UNAVAIL     [TEST]",
             "              Queue 2 Tracks",
             " QUEUE  Removed Track Four from Queue. Queue 2 Tracks",
         ]
@@ -523,8 +523,8 @@ fn playing_a_queued_track_makes_it_current_and_preserves_following_tracks() {
         [
             "  CURRENT  Track Two [TEST] • PLAYING • 00:00/00:02",
             "  QUEUE • 2 Tracks • Track 1/2",
-            "  SEL+UNAV > TRACK   Track Three                 Tester                   [TEST]",
-            "             TRACK   Track Four                  Tester                   [TEST]",
+            "  SEL+UNAV > TRACK     Track Three                            UNAVAIL     [TEST]",
+            "             TRACK     Track Four                               00:02     [TEST]",
             " NOW PLAYING  Track Two [TEST] • PLAYING • 00:00/00:02",
             "              Queue 2 Tracks",
         ]
@@ -569,7 +569,7 @@ fn playing_a_non_first_queued_track_resets_focus_to_its_following_queue() {
         [
             "  CURRENT  Track Four [TEST] • PLAYING • 00:00/00:02",
             "  QUEUE • 1 Track • Track 1/1",
-            "  SELECTED > TRACK   Track Two                   Tester                   [TEST]",
+            "  SELECTED > TRACK     Track Two                                00:02     [TEST]",
         ]
         .map(str::to_owned)
     );
@@ -591,7 +591,7 @@ fn queued_playback_resets_saved_queue_focus_when_details_are_open_during_load() 
         [
             "  CURRENT  Track Four [TEST] • PLAYING • 00:00/00:02",
             "  QUEUE • 1 Track • Track 1/1",
-            "  SELECTED > TRACK   Track Two                   Tester                   [TEST]",
+            "  SELECTED > TRACK     Track Two                                00:02     [TEST]",
         ]
         .map(str::to_owned)
     );
@@ -637,7 +637,7 @@ fn a_long_queue_scrolls_without_overwriting_the_persistent_frame_rails() {
     assert_eq!(
         (
             wide[0].trim_end(),
-            wide[5].trim_end(),
+            wide[5].split('│').next().unwrap().trim_end(),
             wide[36].trim_end(),
             wide[37].trim_end(),
             wide[38].trim_end(),
@@ -667,7 +667,7 @@ fn a_wide_queue_uses_the_available_browser_height_without_changing_keys() {
     assert_eq!(
         (
             rendered[0].trim_end(),
-            rendered[5].trim_end(),
+            rendered[5].split('│').next().unwrap().trim_end(),
             rendered[6].contains("Night Geometry"),
             rendered[6].contains("[HARBOR]"),
             rendered[24].contains("SELECTED > TRACK"),
@@ -721,8 +721,8 @@ fn automatic_advancement_preserves_queue_focus_and_retains_the_final_track_stopp
         [
             "  CURRENT  Track Two [TEST] • PLAYING • 00:00/00:02",
             "  QUEUE • 2 Tracks • Track 2/2",
-            "  UNAVAIL !  TRACK   Track Three                 Tester                   [TEST]",
-            "  SELECTED > TRACK   Track Four                  Tester                   [TEST]",
+            "  UNAVAIL !  TRACK     Track Three                            UNAVAIL     [TEST]",
+            "  SELECTED > TRACK     Track Four                               00:02     [TEST]",
         ]
         .map(str::to_owned)
     );
@@ -764,8 +764,8 @@ fn automatic_advancement_keeps_the_saved_queue_focus_valid_while_details_are_ope
         [5, 6, 7].map(|row| rendered[row].trim_end().to_owned()),
         [
             "  QUEUE • 2 Tracks • Track 2/2",
-            "  UNAVAIL !  TRACK   Track Three                 Tester                   [TEST]",
-            "  SELECTED > TRACK   Track Four                  Tester                   [TEST]",
+            "  UNAVAIL !  TRACK     Track Three                            UNAVAIL     [TEST]",
+            "  SELECTED > TRACK     Track Four                               00:02     [TEST]",
         ]
         .map(str::to_owned)
     );

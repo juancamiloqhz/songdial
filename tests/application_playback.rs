@@ -276,7 +276,7 @@ fn failed_replacement_keeps_the_existing_session_and_explains_the_failure() {
         (failed[20].trim_end(), failed[21].trim_end()),
         (
             " NOW PLAYING  Night Ledger [MORROW] • LIVE",
-            "              Playback failed: The simulated signal could not load.",
+            "              ERROR • Playback failed: The simulated signal could not load.",
         )
     );
 }
@@ -333,7 +333,7 @@ fn empty_playlist_cannot_start_and_explains_why() {
     let rendered = lines(&application.render());
     assert_eq!(
         rendered[21].trim_end(),
-        "              Cannot play: Empty Room has no Tracks."
+        "              ERROR • Cannot play: Empty Room has no Tracks."
     );
 }
 
@@ -353,7 +353,7 @@ fn unavailable_station_cannot_start_and_preserves_its_reason() {
     let rendered = lines(&application.render());
     assert_eq!(
         rendered[21].trim_end(),
-        "              Cannot play: Signal maintenance is in progress."
+        "              ERROR • Cannot play: Signal maintenance is in progress."
     );
 }
 
@@ -377,7 +377,7 @@ fn unavailable_track_cannot_start_and_preserves_its_reason() {
     let rendered = lines(&application.render());
     assert_eq!(
         rendered[21].trim_end(),
-        "              Cannot play: This recording is unavailable in the Demo catalog."
+        "              ERROR • Cannot play: This recording is unavailable in the Demo ca…"
     );
 }
 
@@ -435,12 +435,15 @@ fn track_rows_show_combined_and_independent_playback_state_in_text() {
     application.handle_event(Event::PlaybackLoaded(request.id()));
 
     let combined = lines(&application.render());
-    assert!(combined[7].contains("SEL+PLAY > TRACK   Night Geometry"));
+    assert!(combined[7].contains("SEL+PLAY > TRACK"));
+    assert!(combined[7].contains("Night Geometry"));
 
     application.handle_event(Event::Key(Key::Down));
     let independent = lines(&application.render());
-    assert!(independent[7].contains("PLAYING *  TRACK   Night Geometry"));
-    assert!(independent[8].contains("SELECTED > TRACK   Night Geometry"));
+    assert!(independent[7].contains("PLAYING *  TRACK"));
+    assert!(independent[7].contains("Night Geometry"));
+    assert!(independent[8].contains("SELECTED > TRACK"));
+    assert!(independent[8].contains("Night Geometry"));
 }
 
 #[test]

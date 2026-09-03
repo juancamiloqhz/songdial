@@ -756,6 +756,8 @@ dependencies = [
  "crossterm",
  "portable-pty",
  "ratatui",
+ "unicode-segmentation",
+ "unicode-width",
 ]
 
 [[package]]

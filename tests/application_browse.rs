@@ -158,7 +158,7 @@ fn station_details_open_without_playback_and_back_restores_the_exact_snapshot() 
             "  Indie instrumental",
             "  Source  Harbor Sound",
             "  Guitar-led instrumentals with a steady horizon.",
-            "  Status  Available",
+            "  Status  AVAILABLE",
             "  Enter opened details only. Nothing started playing.",
             " NOW PLAYING  Nothing playing",
             "              Open a choice to keep exploring.",
@@ -252,7 +252,7 @@ fn empty_intent_and_playlist_explain_their_deterministic_next_action() {
         (
             [
                 " SONGDIAL / MOOD & ACTIVITY / RESET",
-                "  0 Stations • 0 Playlists",
+                "  0 Stations • 0 Playlists • EMPTY",
                 "  Nothing matches Reset in the Demo catalog.",
                 "  Esc returns to Mood & activity to choose another direction.",
                 " NOW PLAYING  Nothing playing",
@@ -261,7 +261,7 @@ fn empty_intent_and_playlist_explain_their_deterministic_next_action() {
             [
                 " SONGDIAL / MOOD & ACTIVITY / DEEP WORK / EMPTY ROOM",
                 "  Source  Harbor Sound • 0 Tracks",
-                "  TRACKS • Empty",
+                "  TRACKS • EMPTY",
                 "  This Playlist has no Tracks in the Demo catalog.",
                 "  Esc returns to Deep Work without changing Now Playing.",
                 " NOW PLAYING  Nothing playing",
