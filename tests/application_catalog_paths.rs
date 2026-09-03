@@ -96,6 +96,18 @@ fn unavailable_station_details_remain_inspectable_and_disable_playback_with_the_
         application.handle_event(Event::Key(Key::Down));
     }
     let browser_snapshot = lines(&application.render())[..20].to_vec();
+    assert_eq!(
+        lines(&application.render())[23].trim_end(),
+        " p unavailable  n queue  Esc back"
+    );
+    assert_eq!(
+        application.handle_event(Event::Key(Key::Char('p'))),
+        Effect::None
+    );
+    assert_eq!(
+        lines(&application.render())[21].trim_end(),
+        "              Cannot play: Signal maintenance is in progress."
+    );
 
     application.handle_event(Event::Key(Key::Enter));
 

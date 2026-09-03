@@ -60,6 +60,18 @@ struct HomeChoiceText {
     title: &'static str,
 }
 
+struct DenseCatalogRow<'a> {
+    row: u16,
+    selected: bool,
+    playing: bool,
+    kind: &'static str,
+    title: &'a str,
+    source_id: &'a CatalogId,
+    detail: &'a str,
+    availability: &'a Availability,
+    status: &'static str,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Viewport {
     width: u16,
@@ -1193,31 +1205,21 @@ impl Application {
                     ),
                 ),
             };
-            let state = Self::dense_row_state(selected, playing, availability);
-            let source = format!("[{}]", self.catalog.source_badge(source_id));
-            let availability = match availability {
-                Availability::Available => "AVAILABLE",
-                Availability::Loading => "LOADING",
-                Availability::Unavailable(_) => "UNAVAIL",
-            };
-
-            buffer.set_string(
-                0,
-                row,
-                format!("  {state:<11}{kind:<10}{title:<46}{source:>11}"),
+            self.render_dense_catalog_row(
+                buffer,
                 base,
+                DenseCatalogRow {
+                    row,
+                    selected,
+                    playing,
+                    kind,
+                    title,
+                    source_id,
+                    detail,
+                    availability,
+                    status: Self::availability_label(availability),
+                },
             );
-            buffer.set_string(
-                0,
-                row + 1,
-                format!("             {detail} • {availability}"),
-                base,
-            );
-
-            if selected && self.current.active_pane == ActivePane::List {
-                let selected = Self::selected_style();
-                buffer.set_style(Self::dense_list_selection_area(row, 2), selected);
-            }
         }
 
         self.render_now_playing(buffer, base);
@@ -1266,41 +1268,39 @@ impl Application {
                 &self.playback,
                 Some(PlaybackSession::Station { station_id, .. }) if station_id == station.id()
             );
-            let state = Self::dense_row_state(selected, playing, station.availability());
-            let source = format!("[{}]", self.catalog.source_badge(station.source_id()));
-            let availability = match station.availability() {
-                Availability::Available => "AVAILABLE",
-                Availability::Loading => "LOADING",
-                Availability::Unavailable(_) => "UNAVAIL",
-            };
             let row = 6 + (slot as u16 * 2);
-            buffer.set_string(
-                0,
-                row,
-                format!(
-                    "  {state:<11}{:<10}{:<46}{source:>11}",
-                    "STATION",
-                    station.name()
-                ),
+            self.render_dense_catalog_row(
+                buffer,
                 base,
+                DenseCatalogRow {
+                    row,
+                    selected,
+                    playing,
+                    kind: "STATION",
+                    title: station.name(),
+                    source_id: station.source_id(),
+                    detail: station.style(),
+                    availability: station.availability(),
+                    status: Self::availability_label(station.availability()),
+                },
             );
-            buffer.set_string(
-                0,
-                row + 1,
-                format!("             {} • {availability}", station.style()),
-                base,
-            );
-            if selected && self.current.active_pane == ActivePane::List {
-                buffer.set_style(
-                    Self::dense_list_selection_area(row, 2),
-                    Self::selected_style(),
-                );
-            }
         }
 
         self.render_now_playing(buffer, base);
         buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter inspect", base);
-        buffer.set_string(0, self.guide_top() + 1, " p play  n queue  Esc back", base);
+        let selected_is_unavailable = stations
+            .get(self.current.selection)
+            .is_some_and(|station| matches!(station.availability(), Availability::Unavailable(_)));
+        buffer.set_string(
+            0,
+            self.guide_top() + 1,
+            if selected_is_unavailable {
+                " p unavailable  n queue  Esc back"
+            } else {
+                " p play  n queue  Esc back"
+            },
+            base,
+        );
     }
 
     fn render_playlists(&self, buffer: &mut Buffer, base: Style) {
@@ -1351,42 +1351,30 @@ impl Application {
                     ..
                 }) if playlist_id == playlist.id()
             );
-            let state = Self::dense_row_state(selected, playing, playlist.availability());
-            let source = format!("[{}]", self.catalog.source_badge(playlist.source_id()));
             let track_count = playlist.track_ids().len();
             let track_suffix = if track_count == 1 { "" } else { "s" };
-            let availability = if playlist.track_ids().is_empty() {
+            let status = if playlist.track_ids().is_empty() {
                 "EMPTY"
             } else {
-                match playlist.availability() {
-                    Availability::Available => "AVAILABLE",
-                    Availability::Loading => "LOADING",
-                    Availability::Unavailable(_) => "UNAVAIL",
-                }
+                Self::availability_label(playlist.availability())
             };
+            let detail = format!("{track_count} Track{track_suffix}");
             let row = 6 + (slot as u16 * 2);
-            buffer.set_string(
-                0,
-                row,
-                format!(
-                    "  {state:<11}{:<10}{:<46}{source:>11}",
-                    "PLAYLIST",
-                    playlist.name()
-                ),
+            self.render_dense_catalog_row(
+                buffer,
                 base,
+                DenseCatalogRow {
+                    row,
+                    selected,
+                    playing,
+                    kind: "PLAYLIST",
+                    title: playlist.name(),
+                    source_id: playlist.source_id(),
+                    detail: &detail,
+                    availability: playlist.availability(),
+                    status,
+                },
             );
-            buffer.set_string(
-                0,
-                row + 1,
-                format!("             {track_count} Track{track_suffix} • {availability}"),
-                base,
-            );
-            if selected && self.current.active_pane == ActivePane::List {
-                buffer.set_style(
-                    Self::dense_list_selection_area(row, 2),
-                    Self::selected_style(),
-                );
-            }
         }
 
         self.render_now_playing(buffer, base);
@@ -2042,6 +2030,37 @@ impl Application {
             (true, false, _) => "SELECTED >",
             (false, false, Availability::Loading) => "LOADING ~",
             (false, false, Availability::Available) => "",
+        }
+    }
+
+    const fn availability_label(availability: &Availability) -> &'static str {
+        match availability {
+            Availability::Available => "AVAILABLE",
+            Availability::Loading => "LOADING",
+            Availability::Unavailable(_) => "UNAVAIL",
+        }
+    }
+
+    fn render_dense_catalog_row(&self, buffer: &mut Buffer, base: Style, row: DenseCatalogRow<'_>) {
+        let state = Self::dense_row_state(row.selected, row.playing, row.availability);
+        let source = format!("[{}]", self.catalog.source_badge(row.source_id));
+        buffer.set_string(
+            0,
+            row.row,
+            format!("  {state:<11}{:<10}{:<46}{source:>11}", row.kind, row.title),
+            base,
+        );
+        buffer.set_string(
+            0,
+            row.row + 1,
+            format!("             {} • {}", row.detail, row.status),
+            base,
+        );
+        if row.selected && self.current.active_pane == ActivePane::List {
+            buffer.set_style(
+                Self::dense_list_selection_area(row.row, 2),
+                Self::selected_style(),
+            );
         }
     }
 
