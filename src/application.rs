@@ -8,7 +8,10 @@ use ratatui::{
 
 use crate::{
     Availability, CatalogId, DemoCatalog,
-    catalog::{IntentMatch, Playlist, ServiceCatalogItem, Station, Track},
+    catalog::{
+        IntentMatch, Playlist, ServiceCatalogCounts, ServiceCatalogItem, ServiceCatalogItemKind,
+        Station, Track,
+    },
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1554,7 +1557,7 @@ impl Application {
             let state = Self::dense_row_state(selected, false, &Availability::Available);
             let source = format!("[{}]", service.badge());
             let items = self.catalog.service_catalog_items(service.id());
-            let (station_count, playlist_count, track_count) = Self::service_catalog_counts(&items);
+            let counts = ServiceCatalogCounts::from_items(&items);
             let row = 6 + index as u16 * 2;
             buffer.set_string(
                 0,
@@ -1570,7 +1573,8 @@ impl Application {
                 0,
                 row + 1,
                 format!(
-                    "             {station_count} Stations • {playlist_count} Playlists • {track_count} Tracks"
+                    "             {} Stations • {} Playlists • {} Tracks",
+                    counts.stations, counts.playlists, counts.tracks
                 ),
                 base,
             );
@@ -1593,7 +1597,7 @@ impl Application {
             .service(service_id)
             .expect("Service catalog should reference a Demo Service");
         let items = self.catalog.service_catalog_items(service_id);
-        let (station_count, playlist_count, track_count) = Self::service_catalog_counts(&items);
+        let counts = ServiceCatalogCounts::from_items(&items);
         buffer.set_string(
             0,
             0,
@@ -1614,7 +1618,10 @@ impl Application {
             0,
             4,
             format!(
-                "  {station_count} Stations • {playlist_count} Playlists • {track_count} Tracks • Item {}/{}",
+                "  {} Stations • {} Playlists • {} Tracks • Item {}/{}",
+                counts.stations,
+                counts.playlists,
+                counts.tracks,
                 self.current.selection + 1,
                 items.len()
             ),
@@ -1630,100 +1637,42 @@ impl Application {
             let index = self.current.scroll_offset + slot;
             let selected = index == self.current.selection;
             let row = 6 + slot as u16 * 2;
-            match item {
-                ServiceCatalogItem::Station(station) => self.render_dense_catalog_row(
-                    buffer,
-                    base,
-                    DenseCatalogRow {
-                        row,
-                        selected,
-                        playing: matches!(
-                            &self.playback,
-                            Some(PlaybackSession::Station { station_id, .. })
-                                if station_id == station.id()
-                        ),
-                        kind: "STATION",
-                        title: station.name(),
-                        source_id: station.source_id(),
-                        detail: station.style(),
-                        availability: station.availability(),
-                        status: Self::availability_label(station.availability()),
-                    },
-                ),
-                ServiceCatalogItem::Playlist(playlist) => {
-                    let track_count = playlist.track_ids().len();
-                    let suffix = if track_count == 1 { "" } else { "s" };
-                    let detail = format!("{track_count} Track{suffix}");
-                    self.render_dense_catalog_row(
-                        buffer,
-                        base,
-                        DenseCatalogRow {
-                            row,
-                            selected,
-                            playing: matches!(
-                                &self.playback,
-                                Some(PlaybackSession::Track {
-                                    origin_playlist_id: Some(playlist_id),
-                                    ..
-                                }) if playlist_id == playlist.id()
-                            ),
-                            kind: "PLAYLIST",
-                            title: playlist.name(),
-                            source_id: playlist.source_id(),
-                            detail: &detail,
-                            availability: playlist.availability(),
-                            status: if track_count == 0 {
-                                "EMPTY"
-                            } else {
-                                Self::availability_label(playlist.availability())
-                            },
-                        },
-                    );
-                }
-                ServiceCatalogItem::Track(track) => self.render_dense_catalog_row(
-                    buffer,
-                    base,
-                    DenseCatalogRow {
-                        row,
-                        selected,
-                        playing: matches!(
-                            &self.playback,
-                            Some(PlaybackSession::Track {
-                                current_track_id,
-                                ..
-                            }) if current_track_id == track.id()
-                        ),
-                        kind: "TRACK",
-                        title: track.name(),
-                        source_id: track.source_id(),
-                        detail: track.creator(),
-                        availability: track.availability(),
-                        status: Self::availability_label(track.availability()),
-                    },
-                ),
-            }
+            let item = *item;
+            let detail = item.detail();
+            let status = if item.kind() == ServiceCatalogItemKind::Playlist && !item.can_play() {
+                "EMPTY"
+            } else {
+                Self::availability_label(item.availability())
+            };
+            self.render_dense_catalog_row(
+                buffer,
+                base,
+                DenseCatalogRow {
+                    row,
+                    selected,
+                    playing: self.service_catalog_item_is_playing(item),
+                    kind: item.kind().label(),
+                    title: item.title(),
+                    source_id: item.source_id(),
+                    detail: &detail,
+                    availability: item.availability(),
+                    status,
+                },
+            );
         }
 
         self.render_now_playing(buffer, base);
         buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter inspect", base);
-        let actions = match items.get(self.current.selection) {
-            Some(ServiceCatalogItem::Station(station))
-                if matches!(station.availability(), Availability::Unavailable(_)) =>
-            {
+        let actions = match items.get(self.current.selection).copied() {
+            Some(item) if item.kind() == ServiceCatalogItemKind::Station && item.can_play() => {
+                " p play  n queue  Esc back"
+            }
+            Some(item) if item.kind() == ServiceCatalogItemKind::Station => {
                 " p unavailable  n queue  Esc back"
             }
-            Some(ServiceCatalogItem::Station(_)) => " p play  n queue  Esc back",
-            Some(ServiceCatalogItem::Playlist(playlist)) if playlist.track_ids().is_empty() => {
-                " p unavailable  a unavailable  Esc back"
-            }
-            Some(ServiceCatalogItem::Track(track))
-                if matches!(track.availability(), Availability::Unavailable(_)) =>
-            {
-                " p unavailable  a unavailable  Esc back"
-            }
-            Some(ServiceCatalogItem::Playlist(_) | ServiceCatalogItem::Track(_)) | None => {
-                " p play  a add  Esc back"
-            }
+            Some(item) if item.can_play() && item.can_queue() => " p play  a add  Esc back",
+            Some(_) => " p unavailable  a unavailable  Esc back",
+            None => " Esc back  ? help  q quit",
         };
         buffer.set_string(0, self.guide_top() + 1, actions, base);
     }
@@ -1745,11 +1694,7 @@ impl Application {
             }
             StationDetailsOrigin::RadioStations => "RADIO STATIONS".to_owned(),
             StationDetailsOrigin::ServiceCatalog(service_id) => {
-                let service = self
-                    .catalog
-                    .service(service_id)
-                    .expect("Station parent Service should exist");
-                format!("BROWSE SERVICES / {}", service.name().to_uppercase())
+                self.service_catalog_breadcrumb(service_id)
             }
         };
         let station = self
@@ -1833,16 +1778,10 @@ impl Application {
             PlaylistDetailsOrigin::MyPlaylists => {
                 ("MY PLAYLISTS".to_owned(), "My playlists".to_owned())
             }
-            PlaylistDetailsOrigin::ServiceCatalog(service_id) => {
-                let service = self
-                    .catalog
-                    .service(service_id)
-                    .expect("Playlist parent Service should exist");
-                (
-                    format!("BROWSE SERVICES / {}", service.name().to_uppercase()),
-                    service.name().to_owned(),
-                )
-            }
+            PlaylistDetailsOrigin::ServiceCatalog(service_id) => (
+                self.service_catalog_breadcrumb(service_id),
+                self.catalog.source_name(service_id).to_owned(),
+            ),
         };
         let playlist = self
             .catalog
@@ -2089,11 +2028,7 @@ impl Application {
             .expect("Track details should reference a catalog Track");
         let parent = match origin {
             TrackDetailsOrigin::ServiceCatalog(service_id) => {
-                let service = self
-                    .catalog
-                    .service(service_id)
-                    .expect("Track parent Service should exist");
-                format!("BROWSE SERVICES / {}", service.name().to_uppercase())
+                self.service_catalog_breadcrumb(service_id)
             }
             TrackDetailsOrigin::Queue => "NOW PLAYING".to_owned(),
         };
@@ -2422,20 +2357,34 @@ impl Application {
         format!("{:02}:{:02}", seconds / 60, seconds % 60)
     }
 
-    fn service_catalog_counts(items: &[ServiceCatalogItem<'_>]) -> (usize, usize, usize) {
-        let station_count = items
-            .iter()
-            .filter(|item| matches!(item, ServiceCatalogItem::Station(_)))
-            .count();
-        let playlist_count = items
-            .iter()
-            .filter(|item| matches!(item, ServiceCatalogItem::Playlist(_)))
-            .count();
-        let track_count = items
-            .iter()
-            .filter(|item| matches!(item, ServiceCatalogItem::Track(_)))
-            .count();
-        (station_count, playlist_count, track_count)
+    fn service_catalog_breadcrumb(&self, service_id: &CatalogId) -> String {
+        format!(
+            "BROWSE SERVICES / {}",
+            self.catalog.source_name(service_id).to_uppercase()
+        )
+    }
+
+    fn service_catalog_item_is_playing(&self, item: ServiceCatalogItem<'_>) -> bool {
+        match item {
+            ServiceCatalogItem::Station(station) => matches!(
+                &self.playback,
+                Some(PlaybackSession::Station { station_id, .. }) if station_id == station.id()
+            ),
+            ServiceCatalogItem::Playlist(playlist) => matches!(
+                &self.playback,
+                Some(PlaybackSession::Track {
+                    origin_playlist_id: Some(playlist_id),
+                    ..
+                }) if playlist_id == playlist.id()
+            ),
+            ServiceCatalogItem::Track(track) => matches!(
+                &self.playback,
+                Some(PlaybackSession::Track {
+                    current_track_id,
+                    ..
+                }) if current_track_id == track.id()
+            ),
+        }
     }
 
     const fn dense_row_state(

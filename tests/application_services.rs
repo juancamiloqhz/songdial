@@ -79,7 +79,7 @@ fn both_fictional_services_open_source_filtered_shared_catalogs() {
 }
 
 #[test]
-fn service_content_details_open_without_playback_and_restore_each_catalog_snapshot() {
+fn service_playable_item_details_open_without_playback_and_restore_each_catalog_snapshot() {
     let mut application = Application::new(Viewport::new(80, 24));
     open_browse_services(&mut application);
     application.handle_event(Event::Key(Key::Enter));
@@ -152,7 +152,7 @@ fn service_content_details_open_without_playback_and_restore_each_catalog_snapsh
 }
 
 #[test]
-fn service_catalog_content_reuses_playback_and_keeps_duplicate_tracks_source_scoped() {
+fn service_catalog_playable_items_reuse_playback_and_keep_duplicate_tracks_source_scoped() {
     let mut application = Application::new(Viewport::new(80, 24));
     open_browse_services(&mut application);
     application.handle_event(Event::Key(Key::Enter));
