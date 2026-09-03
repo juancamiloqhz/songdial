@@ -92,6 +92,35 @@ impl ServiceCatalogItemProjection<'_> {
     }
 }
 
+struct SearchResultProjection<'a> {
+    details_destination: Destination,
+    playback_start: PlaybackStartOutcome,
+    queue_addition: Option<QueueAddition>,
+    queue_is_applicable: bool,
+    playing: bool,
+    kind: &'static str,
+    title: &'a str,
+    source_id: Option<&'a CatalogId>,
+    availability: &'a Availability,
+}
+
+impl SearchResultProjection<'_> {
+    fn can_play(&self) -> bool {
+        matches!(self.playback_start, PlaybackStartOutcome::Ready(_))
+    }
+
+    fn can_queue(&self) -> bool {
+        self.queue_addition.as_ref().is_some_and(Result::is_ok)
+    }
+
+    fn play_is_applicable(&self) -> bool {
+        !matches!(
+            self.playback_start,
+            PlaybackStartOutcome::NoPlayableSelected
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Viewport {
     width: u16,
@@ -555,14 +584,10 @@ impl Application {
                 let Some(result) = results.items.get(self.current.selection).copied() else {
                     return;
                 };
-                match result {
-                    SearchResult::ListeningIntent(_) => return,
-                    SearchResult::Station(_) => {
-                        Err("Stations are continuous and cannot be queued.".to_owned())
-                    }
-                    SearchResult::Playlist(playlist) => self.playlist_queue_addition(playlist),
-                    SearchResult::Track(track) => Self::track_queue_addition(track),
-                }
+                let Some(addition) = self.search_result_projection(result).queue_addition else {
+                    return;
+                };
+                addition
             }
             Destination::TrackDetails {
                 origin: TrackDetailsOrigin::ServiceCatalog(_) | TrackDetailsOrigin::Search,
@@ -739,6 +764,82 @@ impl Application {
         }
     }
 
+    fn search_result_projection<'a>(&self, result: SearchResult<'a>) -> SearchResultProjection<'a> {
+        match result {
+            SearchResult::ListeningIntent(intent) => SearchResultProjection {
+                details_destination: Destination::ListeningIntent(intent.id().clone()),
+                playback_start: PlaybackStartOutcome::NoPlayableSelected,
+                queue_addition: None,
+                queue_is_applicable: false,
+                playing: false,
+                kind: "INTENT",
+                title: intent.name(),
+                source_id: None,
+                availability: &Availability::Available,
+            },
+            SearchResult::Station(station) => SearchResultProjection {
+                details_destination: Destination::StationDetails {
+                    origin: StationDetailsOrigin::Search,
+                    station_id: station.id().clone(),
+                },
+                playback_start: Self::station_playback_start(station),
+                queue_addition: Some(Err(
+                    "Stations are continuous and cannot be queued.".to_owned()
+                )),
+                queue_is_applicable: false,
+                playing: matches!(
+                    &self.playback,
+                    Some(PlaybackSession::Station { station_id, .. })
+                        if station_id == station.id()
+                ),
+                kind: "STATION",
+                title: station.name(),
+                source_id: Some(station.source_id()),
+                availability: station.availability(),
+            },
+            SearchResult::Playlist(playlist) => SearchResultProjection {
+                details_destination: Destination::PlaylistDetails {
+                    origin: PlaylistDetailsOrigin::Search,
+                    playlist_id: playlist.id().clone(),
+                },
+                playback_start: self.playlist_playback_start(playlist),
+                queue_addition: Some(self.playlist_queue_addition(playlist)),
+                queue_is_applicable: true,
+                playing: matches!(
+                    &self.playback,
+                    Some(PlaybackSession::Track {
+                        origin_playlist_id: Some(playlist_id),
+                        ..
+                    }) if playlist_id == playlist.id()
+                ),
+                kind: "PLAYLIST",
+                title: playlist.name(),
+                source_id: Some(playlist.source_id()),
+                availability: playlist.availability(),
+            },
+            SearchResult::Track(track) => SearchResultProjection {
+                details_destination: Destination::TrackDetails {
+                    origin: TrackDetailsOrigin::Search,
+                    track_id: track.id().clone(),
+                },
+                playback_start: Self::track_playback_start(track),
+                queue_addition: Some(Self::track_queue_addition(track)),
+                queue_is_applicable: true,
+                playing: matches!(
+                    &self.playback,
+                    Some(PlaybackSession::Track {
+                        current_track_id,
+                        ..
+                    }) if current_track_id == track.id()
+                ),
+                kind: "TRACK",
+                title: track.name(),
+                source_id: Some(track.source_id()),
+                availability: track.availability(),
+            },
+        }
+    }
+
     fn advance_playback_tick(&mut self) {
         let Some(PlaybackSession::Track {
             current_track_id,
@@ -895,17 +996,9 @@ impl Application {
                 .items
                 .get(self.current.selection)
                 .copied()
-                .map_or(
-                    PlaybackStartOutcome::NoPlayableSelected,
-                    |result| match result {
-                        SearchResult::ListeningIntent(_) => {
-                            PlaybackStartOutcome::NoPlayableSelected
-                        }
-                        SearchResult::Station(station) => Self::station_playback_start(station),
-                        SearchResult::Playlist(playlist) => self.playlist_playback_start(playlist),
-                        SearchResult::Track(track) => Self::track_playback_start(track),
-                    },
-                ),
+                .map_or(PlaybackStartOutcome::NoPlayableSelected, |result| {
+                    self.search_result_projection(result).playback_start
+                }),
             Destination::StationDetails { station_id, .. } => self
                 .catalog
                 .station(station_id)
@@ -1182,23 +1275,7 @@ impl Application {
                 let Some(result) = results.items.get(self.current.selection).copied() else {
                     return;
                 };
-                match result {
-                    SearchResult::ListeningIntent(intent) => {
-                        Destination::ListeningIntent(intent.id().clone())
-                    }
-                    SearchResult::Station(station) => Destination::StationDetails {
-                        origin: StationDetailsOrigin::Search,
-                        station_id: station.id().clone(),
-                    },
-                    SearchResult::Playlist(playlist) => Destination::PlaylistDetails {
-                        origin: PlaylistDetailsOrigin::Search,
-                        playlist_id: playlist.id().clone(),
-                    },
-                    SearchResult::Track(track) => Destination::TrackDetails {
-                        origin: TrackDetailsOrigin::Search,
-                        track_id: track.id().clone(),
-                    },
-                }
+                self.search_result_projection(result).details_destination
             }
             Destination::NowPlaying => {
                 let Some(PlaybackSession::Track { queue, .. }) = &self.playback else {
@@ -1796,24 +1873,20 @@ impl Application {
             buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter inspect", base);
             let actions = results.items.get(self.current.selection).copied().map_or(
                 " / edit query  n queue  Esc back",
-                |result| match result {
-                    SearchResult::ListeningIntent(_) => " / edit query  n queue  Esc back",
-                    SearchResult::Station(station)
-                        if matches!(station.availability(), Availability::Unavailable(_)) =>
-                    {
-                        " p unavailable  / edit  Esc back"
-                    }
-                    SearchResult::Station(_) => " p play  / edit query  Esc back",
-                    SearchResult::Playlist(playlist) if playlist.track_ids().is_empty() => {
-                        " p unavailable  a unavailable  Esc back"
-                    }
-                    SearchResult::Track(track)
-                        if matches!(track.availability(), Availability::Unavailable(_)) =>
-                    {
-                        " p unavailable  a unavailable  Esc back"
-                    }
-                    SearchResult::Playlist(_) | SearchResult::Track(_) => {
-                        " p play  a add  / edit  Esc back"
+                |result| {
+                    let projection = self.search_result_projection(result);
+                    match (
+                        projection.play_is_applicable(),
+                        projection.can_play(),
+                        projection.queue_is_applicable,
+                        projection.can_queue(),
+                    ) {
+                        (false, _, _, _) => " / edit query  n queue  Esc back",
+                        (true, false, false, _) => " p unavailable  / edit  Esc back",
+                        (true, true, false, _) => " p play  / edit query  Esc back",
+                        (_, false, true, _) => " p unavailable  a unavailable  Esc back",
+                        (_, true, true, false) => " p play  a unavailable  Esc back",
+                        (_, true, true, true) => " p play  a add  / edit  Esc back",
                     }
                 },
             );
@@ -1829,50 +1902,19 @@ impl Application {
         selected: bool,
         result: SearchResult<'_>,
     ) {
-        let (kind, source_id, availability, playing) = match result {
-            SearchResult::ListeningIntent(_) => ("INTENT", None, &Availability::Available, false),
-            SearchResult::Station(station) => (
-                "STATION",
-                Some(station.source_id()),
-                station.availability(),
-                matches!(
-                    &self.playback,
-                    Some(PlaybackSession::Station { station_id, .. }) if station_id == station.id()
-                ),
-            ),
-            SearchResult::Playlist(playlist) => (
-                "PLAYLIST",
-                Some(playlist.source_id()),
-                playlist.availability(),
-                matches!(
-                    &self.playback,
-                    Some(PlaybackSession::Track {
-                        origin_playlist_id: Some(playlist_id),
-                        ..
-                    }) if playlist_id == playlist.id()
-                ),
-            ),
-            SearchResult::Track(track) => (
-                "TRACK",
-                Some(track.source_id()),
-                track.availability(),
-                matches!(
-                    &self.playback,
-                    Some(PlaybackSession::Track {
-                        current_track_id,
-                        ..
-                    }) if current_track_id == track.id()
-                ),
-            ),
-        };
-        let state = Self::dense_row_state(selected, playing, availability);
-        let source = source_id
+        let projection = self.search_result_projection(result);
+        let state = Self::dense_row_state(selected, projection.playing, projection.availability);
+        let source = projection
+            .source_id
             .map(|source_id| format!("[{}]", self.catalog.source_badge(source_id)))
             .unwrap_or_default();
         buffer.set_string(
             0,
             row,
-            format!("  {state:<11}{kind:<10}{:<44}{source:>11}", result.title()),
+            format!(
+                "  {state:<11}{:<10}{:<44}{source:>11}",
+                projection.kind, projection.title
+            ),
             base,
         );
         if selected {

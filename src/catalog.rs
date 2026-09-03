@@ -436,22 +436,13 @@ pub(crate) enum SearchResult<'a> {
     Track(&'a Track),
 }
 
-impl<'a> SearchResult<'a> {
+impl SearchResult<'_> {
     pub(crate) const fn group(self) -> SearchResultGroup {
         match self {
             Self::ListeningIntent(_) => SearchResultGroup::ListeningIntents,
             Self::Station(_) => SearchResultGroup::Stations,
             Self::Playlist(_) => SearchResultGroup::Playlists,
             Self::Track(_) => SearchResultGroup::Tracks,
-        }
-    }
-
-    pub(crate) fn title(self) -> &'a str {
-        match self {
-            Self::ListeningIntent(intent) => intent.name(),
-            Self::Station(station) => station.name(),
-            Self::Playlist(playlist) => playlist.name(),
-            Self::Track(track) => track.name(),
         }
     }
 }
@@ -1011,23 +1002,21 @@ impl DemoCatalog {
         }
         let tokens = normalized_query.split_whitespace().collect::<Vec<_>>();
 
-        let mut listening_intents = self
-            .listening_intents
-            .iter()
-            .filter_map(|intent| {
+        let listening_intents = ranked_search_results(
+            &self.listening_intents,
+            |intent| {
                 search_rank(
                     intent.name(),
                     &[intent.name(), intent.description()],
                     &normalized_query,
                     &tokens,
                 )
-                .map(|rank| (rank, SearchResult::ListeningIntent(intent)))
-            })
-            .collect::<Vec<_>>();
-        let mut stations = self
-            .stations
-            .iter()
-            .filter_map(|station| {
+            },
+            SearchResult::ListeningIntent,
+        );
+        let stations = ranked_search_results(
+            &self.stations,
+            |station| {
                 let source = self.service(station.source_id());
                 search_rank(
                     station.name(),
@@ -1041,13 +1030,12 @@ impl DemoCatalog {
                     &normalized_query,
                     &tokens,
                 )
-                .map(|rank| (rank, SearchResult::Station(station)))
-            })
-            .collect::<Vec<_>>();
-        let mut playlists = self
-            .playlists
-            .iter()
-            .filter_map(|playlist| {
+            },
+            SearchResult::Station,
+        );
+        let playlists = ranked_search_results(
+            &self.playlists,
+            |playlist| {
                 let source = self.service(playlist.source_id());
                 search_rank(
                     playlist.name(),
@@ -1060,13 +1048,12 @@ impl DemoCatalog {
                     &normalized_query,
                     &tokens,
                 )
-                .map(|rank| (rank, SearchResult::Playlist(playlist)))
-            })
-            .collect::<Vec<_>>();
-        let mut tracks = self
-            .tracks
-            .iter()
-            .filter_map(|track| {
+            },
+            SearchResult::Playlist,
+        );
+        let tracks = ranked_search_results(
+            &self.tracks,
+            |track| {
                 let source = self.service(track.source_id());
                 search_rank(
                     track.name(),
@@ -1079,21 +1066,15 @@ impl DemoCatalog {
                     &normalized_query,
                     &tokens,
                 )
-                .map(|rank| (rank, SearchResult::Track(track)))
-            })
-            .collect::<Vec<_>>();
-
-        listening_intents.sort_by_key(|(rank, _)| *rank);
-        stations.sort_by_key(|(rank, _)| *rank);
-        playlists.sort_by_key(|(rank, _)| *rank);
-        tracks.sort_by_key(|(rank, _)| *rank);
+            },
+            SearchResult::Track,
+        );
 
         let items = listening_intents
             .into_iter()
             .chain(stations)
             .chain(playlists)
             .chain(tracks)
-            .map(|(_, result)| result)
             .collect();
         SearchResults { items }
     }
@@ -1106,6 +1087,19 @@ impl DemoCatalog {
         self.service(source_id)
             .map_or("Unknown Source", Service::name)
     }
+}
+
+fn ranked_search_results<'a, T>(
+    items: &'a [T],
+    rank: impl Fn(&T) -> Option<u8>,
+    result: impl Fn(&'a T) -> SearchResult<'a>,
+) -> Vec<SearchResult<'a>> {
+    let mut ranked = items
+        .iter()
+        .filter_map(|item| rank(item).map(|rank| (rank, result(item))))
+        .collect::<Vec<_>>();
+    ranked.sort_by_key(|(rank, _)| *rank);
+    ranked.into_iter().map(|(_, result)| result).collect()
 }
 
 fn search_rank(
