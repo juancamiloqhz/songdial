@@ -8,11 +8,515 @@ mod support;
 
 use support::lines;
 
+fn assert_exact_text_frame(application: &Application, default_row: &str, rows: &[(usize, &str)]) {
+    let actual = lines(&application.render())
+        .into_iter()
+        .map(|line| line.trim_end().to_owned())
+        .collect::<Vec<_>>();
+    let mut expected = vec![default_row.to_owned(); actual.len()];
+    for &(row, text) in rows {
+        expected[row] = text.to_owned();
+    }
+    assert_eq!(actual, expected);
+}
+
 fn playback_request(effect: Effect) -> songdial::PlaybackRequest {
     let Effect::LoadPlayback(request) = effect else {
         panic!("expected playback loading effect, got {effect:?}");
     };
     request
+}
+
+#[test]
+fn exact_buffer_matrix_covers_terminal_sizes_options_content_and_states() {
+    let compact = Application::new(Viewport::new(80, 24));
+    assert_exact_text_frame(
+        &compact,
+        "",
+        &[
+            (0, " SONGDIAL / HOME"),
+            (2, "  CHOOSE WHAT FITS RIGHT NOW"),
+            (
+                4,
+                "  > Mood & activity                                           SELECTED",
+            ),
+            (5, "    Radio stations"),
+            (6, "    My playlists"),
+            (7, "    Browse services"),
+            (8, "    Search everything"),
+            (
+                10,
+                "  Enter opens a Destination. Playback always starts separately.",
+            ),
+            (20, " NOW PLAYING  Nothing playing"),
+            (21, "              Open a choice to keep exploring."),
+            (22, " ↑/k up  ↓/j down  Enter open"),
+            (23, " n queue  ? help  q quit"),
+        ],
+    );
+
+    let intermediate = Application::new(Viewport::new(100, 30));
+    assert_exact_text_frame(
+        &intermediate,
+        "",
+        &[
+            (0, " SONGDIAL / HOME"),
+            (2, "  CHOOSE WHAT FITS RIGHT NOW"),
+            (
+                4,
+                "  > Mood & activity                                           SELECTED",
+            ),
+            (5, "    Radio stations"),
+            (6, "    My playlists"),
+            (7, "    Browse services"),
+            (8, "    Search everything"),
+            (
+                10,
+                "  Enter opens a Destination. Playback always starts separately.",
+            ),
+            (26, " NOW PLAYING  Nothing playing"),
+            (27, "              Open a choice to keep exploring."),
+            (28, " ↑/k up  ↓/j down  Enter open"),
+            (29, " n queue  ? help  q quit"),
+        ],
+    );
+
+    let wide = Application::new(Viewport::new(120, 40));
+    assert_exact_text_frame(
+        &wide,
+        "                                                          │",
+        &[
+            (0, " SONGDIAL / HOME"),
+            (
+                2,
+                "  CHOOSE WHAT FITS RIGHT NOW                              │ DETAIL LENS / READ ONLY",
+            ),
+            (
+                4,
+                "  > Mood & activity                                       │ DESTINATION",
+            ),
+            (
+                5,
+                "    Radio stations                                        │ Mood & activity",
+            ),
+            (
+                6,
+                "    My playlists                                          │",
+            ),
+            (
+                7,
+                "    Browse services                                       │ Start from a Listening intent before choosing a Source.",
+            ),
+            (
+                8,
+                "    Search everything                                     │",
+            ),
+            (
+                9,
+                "                                                          │ Enter still opens the same Destination.",
+            ),
+            (
+                10,
+                "  Enter opens a Destination. Playback always starts separa│",
+            ),
+            (36, " NOW PLAYING  Nothing playing"),
+            (37, "              Open a choice to keep exploring."),
+            (38, " ↑/k up  ↓/j down  Enter open"),
+            (39, " n queue  ? help  q quit"),
+        ],
+    );
+
+    let guard = Application::new(Viewport::new(79, 23));
+    assert_exact_text_frame(
+        &guard,
+        "",
+        &[
+            (8, "                           SONGDIAL NEEDS MORE ROOM"),
+            (10, "                             Current  79×23 cells"),
+            (11, "                             Required 80×24 cells"),
+            (
+                13,
+                "                   Resize to recover the unchanged session.",
+            ),
+            (14, "                                    q quit"),
+        ],
+    );
+
+    let mut no_color =
+        Application::with_options(Viewport::new(80, 24), ApplicationOptions::new(false, true));
+    no_color.handle_event(Event::Key(Key::Down));
+    assert_exact_text_frame(
+        &no_color,
+        "",
+        &[
+            (0, " SONGDIAL / HOME"),
+            (2, "  CHOOSE WHAT FITS RIGHT NOW"),
+            (4, "    Mood & activity"),
+            (
+                5,
+                "  > Radio stations                                            SELECTED",
+            ),
+            (6, "    My playlists"),
+            (7, "    Browse services"),
+            (8, "    Search everything"),
+            (
+                10,
+                "  Enter opens a Destination. Playback always starts separately.",
+            ),
+            (20, " NOW PLAYING  Nothing playing"),
+            (21, "              Open a choice to keep exploring."),
+            (22, " ↑/k up  ↓/j down  Enter open"),
+            (23, " n queue  ? help  q quit"),
+        ],
+    );
+
+    let mut loading =
+        Application::with_options(Viewport::new(80, 24), ApplicationOptions::new(true, false));
+    loading.handle_event(Event::Key(Key::Down));
+    loading.handle_event(Event::Key(Key::Enter));
+    let _ = playback_request(loading.handle_event(Event::Key(Key::Char('p'))));
+    assert_exact_text_frame(
+        &loading,
+        "",
+        &[
+            (0, " SONGDIAL / RADIO STATIONS"),
+            (2, "  RADIO STATIONS"),
+            (3, "  Continuous music from every Source."),
+            (4, "  8 Stations • Station 1/8"),
+            (
+                6,
+                "  SELECTED > STATION   Night Ledger                         AVAILABLE   [MORROW]",
+            ),
+            (7, "             Ambient • AVAILABLE"),
+            (
+                8,
+                "  LOADING ~  STATION   Daylight Circuit                       LOADING   [HARBOR]",
+            ),
+            (9, "             Minimal electronic • LOADING"),
+            (
+                10,
+                "             STATION   Stillwater FM                        AVAILABLE   [MORROW]",
+            ),
+            (11, "             Ambient piano • AVAILABLE"),
+            (
+                12,
+                "             STATION   Kinetic Line                         AVAILABLE   [HARBOR]",
+            ),
+            (13, "             Instrumental pulse • AVAILABLE"),
+            (
+                14,
+                "             STATION   Low Tide Radio                       AVAILABLE   [MORROW]",
+            ),
+            (15, "             Downtempo • AVAILABLE"),
+            (
+                16,
+                "             STATION   Afterglow Signal                     AVAILABLE   [HARBOR]",
+            ),
+            (17, "             Warm electronica • AVAILABLE"),
+            (
+                18,
+                "  UNAVAIL !  STATION   Northbound Static                      UNAVAIL   [MORROW]",
+            ),
+            (19, "             Drone • UNAVAIL"),
+            (20, " NOW PLAYING  Loading Night Ledger [MORROW]"),
+            (21, "              Waiting for simulated playback."),
+            (22, " ↑/k ↓/j move  Enter inspect"),
+            (23, " p play  n queue  Esc back"),
+        ],
+    );
+
+    let mut unicode = Application::with_catalog(Viewport::new(80, 24), unicode_catalog());
+    open_only_service(&mut unicode);
+    assert_exact_text_frame(
+        &unicode,
+        "",
+        &[
+            (0, " SONGDIAL / BROWSE SERVICES / מקור 音 源"),
+            (2, "  מקור 音 源"),
+            (3, "  Source-filtered Stations, Playlists, and Tracks."),
+            (4, "  1 Stations • 0 Playlists • 0 Tracks • Item 1/1"),
+            (
+                6,
+                "  SELECTED > STATION   深 い 集 中 の た め の 非 常 に 長 い 放 送  e\u{301}lan…   LOADING     [源 泉 ]",
+            ),
+            (7, "             静 か な 電 子 音 楽  • LOADING"),
+            (20, " NOW PLAYING  Nothing playing"),
+            (21, "              Open a choice to keep exploring."),
+            (22, " ↑/k ↓/j move  Enter inspect"),
+            (23, " p play  n queue  Esc back"),
+        ],
+    );
+
+    let mut empty = Application::with_catalog(Viewport::new(80, 24), empty_catalog());
+    empty.handle_event(Event::Key(Key::Down));
+    empty.handle_event(Event::Key(Key::Enter));
+    assert_exact_text_frame(
+        &empty,
+        "",
+        &[
+            (0, " SONGDIAL / RADIO STATIONS"),
+            (2, "  RADIO STATIONS"),
+            (3, "  Continuous music from every Source."),
+            (4, "  0 Stations • EMPTY"),
+            (7, "  No Stations are available."),
+            (8, "  Esc returns Home to choose another path."),
+            (20, " NOW PLAYING  Nothing playing"),
+            (21, "              Open a choice to keep exploring."),
+            (22, " n queue  Esc back  ? help  q quit"),
+        ],
+    );
+
+    let mut unavailable = Application::new(Viewport::new(80, 24));
+    unavailable.handle_event(Event::Key(Key::Down));
+    unavailable.handle_event(Event::Key(Key::Enter));
+    for _ in 0..6 {
+        unavailable.handle_event(Event::Key(Key::Down));
+    }
+    assert_exact_text_frame(
+        &unavailable,
+        "",
+        &[
+            (0, " SONGDIAL / RADIO STATIONS"),
+            (2, "  RADIO STATIONS"),
+            (3, "  Continuous music from every Source."),
+            (4, "  8 Stations • Station 7/8"),
+            (
+                6,
+                "             STATION   Night Ledger                         AVAILABLE   [MORROW]",
+            ),
+            (7, "             Ambient • AVAILABLE"),
+            (
+                8,
+                "  LOADING ~  STATION   Daylight Circuit                       LOADING   [HARBOR]",
+            ),
+            (9, "             Minimal electronic • LOADING"),
+            (
+                10,
+                "             STATION   Stillwater FM                        AVAILABLE   [MORROW]",
+            ),
+            (11, "             Ambient piano • AVAILABLE"),
+            (
+                12,
+                "             STATION   Kinetic Line                         AVAILABLE   [HARBOR]",
+            ),
+            (13, "             Instrumental pulse • AVAILABLE"),
+            (
+                14,
+                "             STATION   Low Tide Radio                       AVAILABLE   [MORROW]",
+            ),
+            (15, "             Downtempo • AVAILABLE"),
+            (
+                16,
+                "             STATION   Afterglow Signal                     AVAILABLE   [HARBOR]",
+            ),
+            (17, "             Warm electronica • AVAILABLE"),
+            (
+                18,
+                "  SEL+UNAV > STATION   Northbound Static                      UNAVAIL   [MORROW]",
+            ),
+            (19, "             Drone • UNAVAIL"),
+            (20, " NOW PLAYING  Nothing playing"),
+            (21, "              Open a choice to keep exploring."),
+            (22, " ↑/k ↓/j move  Enter inspect"),
+            (23, " p unavailable  n queue  Esc back"),
+        ],
+    );
+
+    let mut error = Application::new(Viewport::new(80, 24));
+    error.handle_event(Event::Key(Key::Down));
+    error.handle_event(Event::Key(Key::Enter));
+    let request = playback_request(error.handle_event(Event::Key(Key::Char('p'))));
+    error.handle_event(Event::PlaybackFailed {
+        request_id: request.id(),
+        reason: "The simulated signal could not load.".to_owned(),
+    });
+    assert_exact_text_frame(
+        &error,
+        "",
+        &[
+            (0, " SONGDIAL / RADIO STATIONS"),
+            (2, "  RADIO STATIONS"),
+            (3, "  Continuous music from every Source."),
+            (4, "  8 Stations • Station 1/8"),
+            (
+                6,
+                "  SELECTED > STATION   Night Ledger                         AVAILABLE   [MORROW]",
+            ),
+            (7, "             Ambient • AVAILABLE"),
+            (
+                8,
+                "  LOADING ~  STATION   Daylight Circuit                       LOADING   [HARBOR]",
+            ),
+            (9, "             Minimal electronic • LOADING"),
+            (
+                10,
+                "             STATION   Stillwater FM                        AVAILABLE   [MORROW]",
+            ),
+            (11, "             Ambient piano • AVAILABLE"),
+            (
+                12,
+                "             STATION   Kinetic Line                         AVAILABLE   [HARBOR]",
+            ),
+            (13, "             Instrumental pulse • AVAILABLE"),
+            (
+                14,
+                "             STATION   Low Tide Radio                       AVAILABLE   [MORROW]",
+            ),
+            (15, "             Downtempo • AVAILABLE"),
+            (
+                16,
+                "             STATION   Afterglow Signal                     AVAILABLE   [HARBOR]",
+            ),
+            (17, "             Warm electronica • AVAILABLE"),
+            (
+                18,
+                "  UNAVAIL !  STATION   Northbound Static                      UNAVAIL   [MORROW]",
+            ),
+            (19, "             Drone • UNAVAIL"),
+            (20, " NOW PLAYING  Nothing playing"),
+            (
+                21,
+                "              ERROR • Playback failed: The simulated signal could not load.",
+            ),
+            (22, " ↑/k ↓/j move  Enter inspect"),
+            (23, " p play  n queue  Esc back"),
+        ],
+    );
+
+    let stopped_catalog = DemoCatalog::new(
+        vec![Service::new("source", "Local Source", "LOCAL")],
+        vec![],
+        vec![],
+        vec![Playlist::new(
+            "playlist",
+            "Brief Playlist",
+            "One brief Track.",
+            "source",
+            &["brief"],
+        )],
+        vec![Track::new(
+            "brief",
+            "Brief Signal",
+            "Test Tone",
+            "source",
+            1,
+        )],
+    );
+    let mut stopped = Application::with_catalog(Viewport::new(80, 24), stopped_catalog);
+    for _ in 0..2 {
+        stopped.handle_event(Event::Key(Key::Down));
+    }
+    stopped.handle_event(Event::Key(Key::Enter));
+    let request = playback_request(stopped.handle_event(Event::Key(Key::Char('p'))));
+    stopped.handle_event(Event::PlaybackLoaded(request.id()));
+    stopped.handle_event(Event::Tick);
+    assert_exact_text_frame(
+        &stopped,
+        "",
+        &[
+            (0, " SONGDIAL / MY PLAYLISTS"),
+            (2, "  MY PLAYLISTS"),
+            (3, "  Personal and saved Playlists from every Source."),
+            (4, "  1 Playlists • Playlist 1/1"),
+            (
+                6,
+                "  SELECTED > PLAYLIST  Brief Playlist                       AVAILABLE    [LOCAL]",
+            ),
+            (7, "             1 Track • AVAILABLE"),
+            (
+                20,
+                " NOW PLAYING  Brief Signal [LOCAL] • STOPPED • 00:01/00:01",
+            ),
+            (21, "              Queue 0 Tracks"),
+            (22, " ↑/k ↓/j move  Enter inspect"),
+            (23, " p play  a add  Esc back"),
+        ],
+    );
+
+    let mut long_queue = Application::new(Viewport::new(80, 24));
+    for _ in 0..2 {
+        long_queue.handle_event(Event::Key(Key::Down));
+    }
+    long_queue.handle_event(Event::Key(Key::Enter));
+    let request = playback_request(long_queue.handle_event(Event::Key(Key::Char('p'))));
+    long_queue.handle_event(Event::PlaybackLoaded(request.id()));
+    long_queue.handle_event(Event::Key(Key::Char('n')));
+    assert_exact_text_frame(
+        &long_queue,
+        "",
+        &[
+            (0, " SONGDIAL / NOW PLAYING"),
+            (2, "  NOW PLAYING & QUEUE"),
+            (
+                3,
+                "  CURRENT  Night Geometry [MORROW] • PLAYING • 00:00/05:28",
+            ),
+            (5, "  QUEUE • 19 Tracks • Track 1/19"),
+            (
+                6,
+                "  SELECTED > TRACK     Night Geometry                           05:31   [HARBOR]",
+            ),
+            (
+                7,
+                "             TRACK     Stillwater Signal                        04:44   [MORROW]",
+            ),
+            (
+                8,
+                "             TRACK     Stillwater Signal                        04:46   [HARBOR]",
+            ),
+            (
+                9,
+                "             TRACK     Slow Aperture                            05:02   [MORROW]",
+            ),
+            (
+                10,
+                "             TRACK     Soft Machines                            04:36   [HARBOR]",
+            ),
+            (
+                11,
+                "             TRACK     Quiet Index                              05:15   [MORROW]",
+            ),
+            (
+                12,
+                "             TRACK     Glass Hours                              04:07   [HARBOR]",
+            ),
+            (
+                13,
+                "             TRACK     Copper Rain                              04:53   [MORROW]",
+            ),
+            (
+                14,
+                "             TRACK     Parallel Dawn                            04:21   [HARBOR]",
+            ),
+            (
+                15,
+                "             TRACK     Signal Garden                            05:08   [MORROW]",
+            ),
+            (
+                16,
+                "             TRACK     Warm Circuit                             04:15   [HARBOR]",
+            ),
+            (
+                17,
+                "             TRACK     Northern Room                            05:22   [MORROW]",
+            ),
+            (
+                18,
+                "             TRACK     Paper Satellites                         04:29   [HARBOR]",
+            ),
+            (
+                19,
+                "             TRACK     Low Light Method                         04:57   [MORROW]",
+            ),
+            (
+                20,
+                " NOW PLAYING  Night Geometry [MORROW] • PLAYING • 00:00/05:28",
+            ),
+            (21, "              Queue 19 Tracks"),
+            (22, " ↑/k ↓/j move  Enter inspect"),
+            (23, " p play  d remove  Esc back"),
+        ],
+    );
 }
 
 #[test]
@@ -390,6 +894,40 @@ fn resize_round_trips_preserve_exact_search_navigation_and_playback_session() {
 }
 
 #[test]
+fn playback_outcomes_received_during_the_guard_are_visible_after_recovery() {
+    let mut application = Application::new(Viewport::new(80, 24));
+    application.handle_event(Event::Key(Key::Down));
+    application.handle_event(Event::Key(Key::Enter));
+    let request = playback_request(application.handle_event(Event::Key(Key::Char('p'))));
+
+    application.handle_event(Event::Resize(Viewport::new(79, 23)));
+    assert_eq!(
+        application.handle_event(Event::PlaybackLoaded(request.id())),
+        Effect::None
+    );
+    application.handle_event(Event::Resize(Viewport::new(80, 24)));
+
+    let recovered = lines(&application.render());
+    assert!(recovered[20].contains("Night Ledger [MORROW] • LIVE"));
+    assert!(!recovered[20].contains("Loading"));
+
+    let mut failed = Application::new(Viewport::new(80, 24));
+    failed.handle_event(Event::Key(Key::Down));
+    failed.handle_event(Event::Key(Key::Enter));
+    let request = playback_request(failed.handle_event(Event::Key(Key::Char('p'))));
+    failed.handle_event(Event::Resize(Viewport::new(79, 23)));
+    failed.handle_event(Event::PlaybackFailed {
+        request_id: request.id(),
+        reason: "The simulated signal could not load.".to_owned(),
+    });
+    failed.handle_event(Event::Resize(Viewport::new(80, 24)));
+
+    let recovered = lines(&failed.render());
+    assert!(recovered[21].contains("ERROR • Playback failed"));
+    assert!(!recovered[20].contains("Loading"));
+}
+
+#[test]
 fn loading_empty_unavailable_and_error_states_use_one_visible_vocabulary() {
     let mut loading = Application::new(Viewport::new(120, 40));
     loading.handle_event(Event::Key(Key::Down));
@@ -475,6 +1013,92 @@ fn stopped_playback_is_explicit_in_the_persistent_strip_and_wide_lens() {
     assert!(stopped[3].contains("STOPPED"));
     assert!(stopped[36].contains("STOPPED"));
     assert!(stopped[11].contains("Playback  STOPPED"));
+}
+
+#[test]
+fn stopped_playback_is_not_reported_as_playing_in_browser_rows() {
+    let catalog = DemoCatalog::new(
+        vec![Service::new("source", "Local Source", "LOCAL")],
+        vec![],
+        vec![],
+        vec![Playlist::new(
+            "playlist",
+            "Brief Playlist",
+            "One brief Track.",
+            "source",
+            &["brief"],
+        )],
+        vec![Track::new(
+            "brief",
+            "Brief Signal",
+            "Test Tone",
+            "source",
+            1,
+        )],
+    );
+    let mut application = Application::with_catalog(Viewport::new(120, 40), catalog);
+    for _ in 0..2 {
+        application.handle_event(Event::Key(Key::Down));
+    }
+    application.handle_event(Event::Key(Key::Enter));
+    let request = playback_request(application.handle_event(Event::Key(Key::Char('p'))));
+    application.handle_event(Event::PlaybackLoaded(request.id()));
+    application.handle_event(Event::Tick);
+
+    let playlists = lines(&application.render());
+    assert!(
+        playlists[6].contains("SELECTED > PLAYLIST"),
+        "{playlists:#?}"
+    );
+    assert!(!playlists[6].contains("SEL+PLAY"), "{playlists:#?}");
+    assert!(!playlists[6].contains("PLAYING"), "{playlists:#?}");
+
+    application.handle_event(Event::Key(Key::Enter));
+    let tracks = lines(&application.render());
+    assert!(tracks[7].contains("SELECTED > TRACK"), "{tracks:#?}");
+    assert!(!tracks[7].contains("SEL+PLAY"), "{tracks:#?}");
+    assert!(!tracks[7].contains("PLAYING"), "{tracks:#?}");
+}
+
+#[test]
+fn playlist_track_lens_only_advertises_actions_that_work_there() {
+    let mut application = Application::new(Viewport::new(120, 40));
+    for _ in 0..2 {
+        application.handle_event(Event::Key(Key::Down));
+    }
+    application.handle_event(Event::Key(Key::Enter));
+    application.handle_event(Event::Key(Key::Enter));
+
+    let rendered = lines(&application.render());
+    assert!(
+        rendered
+            .iter()
+            .any(|line| line.contains("p plays this Track")),
+        "{rendered:#?}"
+    );
+    assert!(
+        rendered
+            .iter()
+            .all(|line| !line.contains("Enter opens details")),
+        "{rendered:#?}"
+    );
+
+    for _ in 0..15 {
+        application.handle_event(Event::Key(Key::Down));
+    }
+    let unavailable = lines(&application.render());
+    assert!(unavailable[10].contains("Status  UNAVAIL"));
+    assert!(
+        unavailable
+            .iter()
+            .any(|line| line.contains("p and a are unavailable for this Track.")),
+        "{unavailable:#?}"
+    );
+    assert_eq!(unavailable[38].trim_end(), " ↑/k ↓/j move  p unavailable");
+    assert_eq!(
+        unavailable[39].trim_end(),
+        " a unavailable  n queue  Esc back"
+    );
 }
 
 #[test]

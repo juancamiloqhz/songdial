@@ -471,10 +471,15 @@ impl Application {
         if !self.viewport.is_supported() {
             return match event {
                 Event::Key(Key::Char('q') | Key::CtrlC) => Effect::Quit,
-                Event::Key(_)
-                | Event::Tick
-                | Event::PlaybackLoaded(_)
-                | Event::PlaybackFailed { .. } => Effect::None,
+                Event::PlaybackLoaded(request_id) => {
+                    self.finish_playback_load(request_id);
+                    Effect::None
+                }
+                Event::PlaybackFailed { request_id, reason } => {
+                    self.fail_playback_load(request_id, reason);
+                    Effect::None
+                }
+                Event::Key(_) | Event::Tick => Effect::None,
                 Event::Resize(_) => unreachable!("resize events handled above"),
             };
         }
@@ -749,6 +754,28 @@ impl Application {
         }
     }
 
+    fn track_playback_is_active(&self, track_id: &CatalogId) -> bool {
+        matches!(
+            &self.playback,
+            Some(PlaybackSession::Track {
+                current_track_id,
+                state,
+                ..
+            }) if current_track_id == track_id && *state != TrackPlaybackState::Stopped
+        )
+    }
+
+    fn playlist_playback_is_active(&self, playlist_id: &CatalogId) -> bool {
+        matches!(
+            &self.playback,
+            Some(PlaybackSession::Track {
+                origin_playlist_id: Some(origin_playlist_id),
+                state,
+                ..
+            }) if origin_playlist_id == playlist_id && *state != TrackPlaybackState::Stopped
+        )
+    }
+
     fn service_catalog_item_projection<'a>(
         &self,
         service_id: &CatalogId,
@@ -786,13 +813,7 @@ impl Application {
                     playback_start: self.playlist_playback_start(playlist),
                     queue_addition: self.playlist_queue_addition(playlist),
                     queue_is_applicable: true,
-                    playing: matches!(
-                        &self.playback,
-                        Some(PlaybackSession::Track {
-                            origin_playlist_id: Some(playlist_id),
-                            ..
-                        }) if playlist_id == playlist.id()
-                    ),
+                    playing: self.playlist_playback_is_active(playlist.id()),
                     kind: "PLAYLIST",
                     title: playlist.name(),
                     source_id: playlist.source_id(),
@@ -814,13 +835,7 @@ impl Application {
                 playback_start: Self::track_playback_start(track),
                 queue_addition: Self::track_queue_addition(track),
                 queue_is_applicable: true,
-                playing: matches!(
-                    &self.playback,
-                    Some(PlaybackSession::Track {
-                        current_track_id,
-                        ..
-                    }) if current_track_id == track.id()
-                ),
+                playing: self.track_playback_is_active(track.id()),
                 kind: "TRACK",
                 title: track.name(),
                 source_id: track.source_id(),
@@ -872,13 +887,7 @@ impl Application {
                 playback_start: self.playlist_playback_start(playlist),
                 queue_addition: Some(self.playlist_queue_addition(playlist)),
                 queue_is_applicable: true,
-                playing: matches!(
-                    &self.playback,
-                    Some(PlaybackSession::Track {
-                        origin_playlist_id: Some(playlist_id),
-                        ..
-                    }) if playlist_id == playlist.id()
-                ),
+                playing: self.playlist_playback_is_active(playlist.id()),
                 kind: "PLAYLIST",
                 title: playlist.name(),
                 source_id: Some(playlist.source_id()),
@@ -892,13 +901,7 @@ impl Application {
                 playback_start: Self::track_playback_start(track),
                 queue_addition: Some(Self::track_queue_addition(track)),
                 queue_is_applicable: true,
-                playing: matches!(
-                    &self.playback,
-                    Some(PlaybackSession::Track {
-                        current_track_id,
-                        ..
-                    }) if current_track_id == track.id()
-                ),
+                playing: self.track_playback_is_active(track.id()),
                 kind: "TRACK",
                 title: track.name(),
                 source_id: Some(track.source_id()),
@@ -1648,7 +1651,21 @@ impl Application {
             Destination::PlaylistDetails { playlist_id, .. } => {
                 let tracks = self.catalog.playlist_tracks(playlist_id);
                 if let Some(track) = tracks.get(self.current.selection) {
-                    Some(self.track_lens("TRACK", track))
+                    let mut lens = self.track_lens("TRACK", track);
+                    if let Some(action) = lens.facts.last_mut() {
+                        *action = match track.availability() {
+                            Availability::Available => {
+                                "p plays this Track • a adds it to Queue.".to_owned()
+                            }
+                            Availability::Loading => {
+                                "p and a are unavailable while this Track is LOADING.".to_owned()
+                            }
+                            Availability::Unavailable(_) => {
+                                "p and a are unavailable for this Track.".to_owned()
+                            }
+                        };
+                    }
+                    Some(lens)
                 } else {
                     self.catalog
                         .playlist(playlist_id)
@@ -2050,13 +2067,7 @@ impl Application {
                         "ORDERED TRACKS"
                     },
                     playlist.availability(),
-                    matches!(
-                        &self.playback,
-                        Some(PlaybackSession::Track {
-                            origin_playlist_id: Some(playlist_id),
-                            ..
-                        }) if playlist_id == playlist.id()
-                    ),
+                    self.playlist_playback_is_active(playlist.id()),
                 ),
             };
             self.render_dense_catalog_row(
@@ -2214,13 +2225,7 @@ impl Application {
         {
             let index = self.current.scroll_offset + slot;
             let selected = index == self.current.selection;
-            let playing = matches!(
-                &self.playback,
-                Some(PlaybackSession::Track {
-                    origin_playlist_id: Some(playlist_id),
-                    ..
-                }) if playlist_id == playlist.id()
-            );
+            let playing = self.playlist_playback_is_active(playlist.id());
             let track_count = playlist.track_ids().len();
             let track_suffix = if track_count == 1 { "" } else { "s" };
             let status = if playlist.track_ids().is_empty() {
@@ -2770,13 +2775,7 @@ impl Application {
         {
             let index = self.current.scroll_offset + slot;
             let selected = index == self.current.selection;
-            let playing = matches!(
-                &self.playback,
-                Some(PlaybackSession::Track {
-                    current_track_id,
-                    ..
-                }) if current_track_id == track.id()
-            );
+            let playing = self.track_playback_is_active(track.id());
             let state = Self::dense_row_state(selected, playing, track.availability());
             let row = 7 + slot as u16;
             let status = Self::track_row_status(track);
@@ -2812,6 +2811,17 @@ impl Application {
                 base,
             );
             buffer.set_string(0, self.guide_top() + 1, " n queue  ? help  q quit", base);
+        } else if tracks
+            .get(self.current.selection)
+            .is_some_and(|track| track.availability() != &Availability::Available)
+        {
+            buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  p unavailable", base);
+            buffer.set_string(
+                0,
+                self.guide_top() + 1,
+                " a unavailable  n queue  Esc back",
+                base,
+            );
         } else {
             buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  p play", base);
             buffer.set_string(0, self.guide_top() + 1, " a add  n queue  Esc back", base);
@@ -3487,9 +3497,8 @@ fn fit_right(text: &str, width: usize) -> String {
     format!("{}{clipped}", " ".repeat(padding))
 }
 
-fn truncate_with_ellipsis(text: &str, width: usize) -> String {
-    let sanitized = text
-        .chars()
+fn sanitize_terminal_text(text: &str) -> String {
+    text.chars()
         .map(|character| {
             if character.is_control() {
                 ' '
@@ -3497,7 +3506,11 @@ fn truncate_with_ellipsis(text: &str, width: usize) -> String {
                 character
             }
         })
-        .collect::<String>();
+        .collect()
+}
+
+fn truncate_with_ellipsis(text: &str, width: usize) -> String {
+    let sanitized = sanitize_terminal_text(text);
     let text = sanitized.as_str();
     if width == 0 {
         return String::new();
@@ -3525,17 +3538,7 @@ fn truncate_with_ellipsis(text: &str, width: usize) -> String {
 }
 
 fn truncate_middle_with_ellipsis(text: &str, width: usize) -> String {
-    let sanitized = text
-        .trim_end()
-        .chars()
-        .map(|character| {
-            if character.is_control() {
-                ' '
-            } else {
-                character
-            }
-        })
-        .collect::<String>();
+    let sanitized = sanitize_terminal_text(text.trim_end());
     if width == 0 {
         return String::new();
     }
