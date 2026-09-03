@@ -60,6 +60,18 @@ struct HomeChoiceText {
     title: &'static str,
 }
 
+struct DenseCatalogRow<'a> {
+    row: u16,
+    selected: bool,
+    playing: bool,
+    kind: &'static str,
+    title: &'a str,
+    source_id: &'a CatalogId,
+    detail: &'a str,
+    availability: &'a Availability,
+    status: &'static str,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Viewport {
     width: u16,
@@ -134,12 +146,14 @@ enum Destination {
     Home,
     ListeningIntents,
     ListeningIntent(CatalogId),
+    Stations,
+    Playlists,
     StationDetails {
-        intent_id: CatalogId,
+        origin: StationDetailsOrigin,
         station_id: CatalogId,
     },
     PlaylistDetails {
-        intent_id: CatalogId,
+        origin: PlaylistDetailsOrigin,
         playlist_id: CatalogId,
     },
     NowPlaying,
@@ -147,6 +161,18 @@ enum Destination {
         track_id: CatalogId,
     },
     NotYetAvailable(HomeChoice),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum StationDetailsOrigin {
+    ListeningIntent(CatalogId),
+    RadioStations,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum PlaylistDetailsOrigin {
+    ListeningIntent(CatalogId),
+    MyPlaylists,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -172,6 +198,8 @@ impl DestinationSnapshot {
             Destination::Home
             | Destination::ListeningIntents
             | Destination::ListeningIntent(_)
+            | Destination::Stations
+            | Destination::Playlists
             | Destination::PlaylistDetails { .. }
             | Destination::NowPlaying => ActivePane::List,
         };
@@ -399,10 +427,19 @@ impl Application {
     fn add_selected_to_queue(&mut self) {
         let (track_ids, confirmation) = match &self.current.destination {
             Destination::PlaylistDetails { playlist_id, .. } => {
-                let Some(track) = self
-                    .catalog
-                    .playlist(playlist_id)
-                    .and_then(|playlist| playlist.track_ids().get(self.current.selection))
+                let Some(playlist) = self.catalog.playlist(playlist_id) else {
+                    return;
+                };
+                if playlist.track_ids().is_empty() {
+                    self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
+                        "Cannot add: {} has no playable Tracks.",
+                        playlist.name()
+                    )));
+                    return;
+                }
+                let Some(track) = playlist
+                    .track_ids()
+                    .get(self.current.selection)
                     .and_then(|track_id| self.catalog.track(track_id))
                 else {
                     return;
@@ -439,40 +476,36 @@ impl Application {
                     ));
                     return;
                 };
-                let track_ids = playlist
-                    .track_ids()
-                    .iter()
-                    .filter(|track_id| {
-                        self.catalog
-                            .track(track_id)
-                            .is_some_and(|track| track.availability() == &Availability::Available)
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>();
-                let added_count = track_ids.len();
-                if added_count == 0 {
-                    self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
-                        "Cannot add: {} has no playable Tracks.",
-                        playlist.name()
-                    )));
-                    return;
+                match self.playlist_queue_addition(playlist) {
+                    Ok(addition) => addition,
+                    Err(reason) => {
+                        self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
+                            "Cannot add: {reason}"
+                        )));
+                        return;
+                    }
                 }
-                let suffix = if added_count == 1 { "" } else { "s" };
-                (
-                    track_ids,
-                    format!(
-                        "Added {} Track{suffix} from {}.",
-                        added_count,
-                        playlist.name()
-                    ),
-                )
+            }
+            Destination::Playlists => {
+                let Some(playlist) = self.catalog.playlists().get(self.current.selection) else {
+                    return;
+                };
+                match self.playlist_queue_addition(playlist) {
+                    Ok(addition) => addition,
+                    Err(reason) => {
+                        self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
+                            "Cannot add: {reason}"
+                        )));
+                        return;
+                    }
+                }
             }
             Destination::Home
             | Destination::ListeningIntents
             | Destination::NowPlaying
             | Destination::QueuedTrackDetails { .. }
             | Destination::NotYetAvailable(_) => return,
-            Destination::StationDetails { .. } => {
+            Destination::Stations | Destination::StationDetails { .. } => {
                 self.playback_feedback = Some(PlaybackFeedback::Persistent(
                     "Cannot add: Stations are continuous and cannot be queued.".to_owned(),
                 ));
@@ -501,6 +534,35 @@ impl Application {
             "{confirmation} Queue {} Track{suffix}",
             queue.len()
         )));
+    }
+
+    fn playlist_queue_addition(
+        &self,
+        playlist: &Playlist,
+    ) -> Result<(Vec<CatalogId>, String), String> {
+        let track_ids = playlist
+            .track_ids()
+            .iter()
+            .filter(|track_id| {
+                self.catalog
+                    .track(track_id)
+                    .is_some_and(|track| track.availability() == &Availability::Available)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let added_count = track_ids.len();
+        if added_count == 0 {
+            return Err(format!("{} has no playable Tracks.", playlist.name()));
+        }
+        let suffix = if added_count == 1 { "" } else { "s" };
+        Ok((
+            track_ids,
+            format!(
+                "Added {} Track{suffix} from {}.",
+                added_count,
+                playlist.name()
+            ),
+        ))
     }
 
     fn advance_playback_tick(&mut self) {
@@ -629,20 +691,42 @@ impl Application {
                         IntentMatch::Playlist(playlist) => self.playlist_playback_start(playlist),
                     },
                 ),
+            Destination::Stations => self
+                .catalog
+                .stations()
+                .get(self.current.selection)
+                .map_or(PlaybackStartOutcome::NoPlayableSelected, |station| {
+                    Self::station_playback_start(station)
+                }),
+            Destination::Playlists => self
+                .catalog
+                .playlists()
+                .get(self.current.selection)
+                .map_or(PlaybackStartOutcome::NoPlayableSelected, |playlist| {
+                    self.playlist_playback_start(playlist)
+                }),
             Destination::StationDetails { station_id, .. } => self
                 .catalog
                 .station(station_id)
                 .map_or(PlaybackStartOutcome::NoPlayableSelected, |station| {
                     Self::station_playback_start(station)
                 }),
-            Destination::PlaylistDetails { playlist_id, .. } => self
-                .catalog
-                .playlist(playlist_id)
-                .and_then(|playlist| playlist.track_ids().get(self.current.selection))
-                .and_then(|track_id| self.catalog.track(track_id))
-                .map_or(PlaybackStartOutcome::NoPlayableSelected, |track| {
-                    Self::track_playback_start(track)
-                }),
+            Destination::PlaylistDetails { playlist_id, .. } => {
+                let Some(playlist) = self.catalog.playlist(playlist_id) else {
+                    return PlaybackStartOutcome::NoPlayableSelected;
+                };
+                if playlist.track_ids().is_empty() {
+                    self.playlist_playback_start(playlist)
+                } else {
+                    playlist
+                        .track_ids()
+                        .get(self.current.selection)
+                        .and_then(|track_id| self.catalog.track(track_id))
+                        .map_or(PlaybackStartOutcome::NoPlayableSelected, |track| {
+                            Self::track_playback_start(track)
+                        })
+                }
+            }
             Destination::NowPlaying => {
                 let Some(PlaybackSession::Track { queue, .. }) = &self.playback else {
                     return PlaybackStartOutcome::NoPlayableSelected;
@@ -770,6 +854,8 @@ impl Application {
     fn keep_selection_visible(&mut self) {
         let visible_items = match &self.current.destination {
             Destination::ListeningIntent(_) => 7,
+            Destination::Stations => 7,
+            Destination::Playlists => 7,
             Destination::PlaylistDetails { .. } => 13,
             Destination::NowPlaying => self.queue_visible_items(),
             Destination::Home => HomeChoice::ALL.len(),
@@ -790,6 +876,8 @@ impl Application {
         match &self.current.destination {
             Destination::Home => HomeChoice::ALL.len(),
             Destination::ListeningIntents => self.catalog.listening_intents().len(),
+            Destination::Stations => self.catalog.stations().len(),
+            Destination::Playlists => self.catalog.playlists().len(),
             Destination::ListeningIntent(intent_id) => self.catalog.intent_matches(intent_id).len(),
             Destination::PlaylistDetails { playlist_id, .. } => self
                 .catalog
@@ -809,10 +897,13 @@ impl Application {
         let destination = match self.current.destination.clone() {
             Destination::Home => {
                 let choice = self.selected_home_choice();
-                if choice == HomeChoice::ListeningIntents {
-                    Destination::ListeningIntents
-                } else {
-                    Destination::NotYetAvailable(choice)
+                match choice {
+                    HomeChoice::ListeningIntents => Destination::ListeningIntents,
+                    HomeChoice::Stations => Destination::Stations,
+                    HomeChoice::Playlists => Destination::Playlists,
+                    HomeChoice::Services | HomeChoice::Search => {
+                        Destination::NotYetAvailable(choice)
+                    }
                 }
             }
             Destination::ListeningIntents => self
@@ -828,14 +919,32 @@ impl Application {
                     .get(self.current.selection)
                 {
                     Some(IntentMatch::Station(station)) => Destination::StationDetails {
-                        intent_id,
+                        origin: StationDetailsOrigin::ListeningIntent(intent_id),
                         station_id: station.id().clone(),
                     },
                     Some(IntentMatch::Playlist(playlist)) => Destination::PlaylistDetails {
-                        intent_id,
+                        origin: PlaylistDetailsOrigin::ListeningIntent(intent_id),
                         playlist_id: playlist.id().clone(),
                     },
                     None => return,
+                }
+            }
+            Destination::Stations => {
+                let Some(station) = self.catalog.stations().get(self.current.selection) else {
+                    return;
+                };
+                Destination::StationDetails {
+                    origin: StationDetailsOrigin::RadioStations,
+                    station_id: station.id().clone(),
+                }
+            }
+            Destination::Playlists => {
+                let Some(playlist) = self.catalog.playlists().get(self.current.selection) else {
+                    return;
+                };
+                Destination::PlaylistDetails {
+                    origin: PlaylistDetailsOrigin::MyPlaylists,
+                    playlist_id: playlist.id().clone(),
                 }
             }
             Destination::NowPlaying => {
@@ -913,14 +1022,15 @@ impl Application {
             Destination::ListeningIntent(intent_id) => {
                 self.render_listening_intent(buffer, base, intent_id);
             }
-            Destination::StationDetails {
-                intent_id,
-                station_id,
-            } => self.render_station_details(buffer, base, intent_id, station_id),
+            Destination::Stations => self.render_stations(buffer, base),
+            Destination::Playlists => self.render_playlists(buffer, base),
+            Destination::StationDetails { origin, station_id } => {
+                self.render_station_details(buffer, base, origin, station_id)
+            }
             Destination::PlaylistDetails {
-                intent_id,
+                origin,
                 playlist_id,
-            } => self.render_playlist_details(buffer, base, intent_id, playlist_id),
+            } => self.render_playlist_details(buffer, base, origin, playlist_id),
             Destination::NowPlaying => self.render_now_playing_destination(buffer, base),
             Destination::QueuedTrackDetails { track_id } => {
                 self.render_queued_track_details(buffer, base, track_id);
@@ -1095,31 +1205,21 @@ impl Application {
                     ),
                 ),
             };
-            let state = Self::dense_row_state(selected, playing, availability);
-            let source = format!("[{}]", self.catalog.source_badge(source_id));
-            let availability = match availability {
-                Availability::Available => "AVAILABLE",
-                Availability::Loading => "LOADING",
-                Availability::Unavailable(_) => "UNAVAIL",
-            };
-
-            buffer.set_string(
-                0,
-                row,
-                format!("  {state:<11}{kind:<10}{title:<46}{source:>11}"),
+            self.render_dense_catalog_row(
+                buffer,
                 base,
+                DenseCatalogRow {
+                    row,
+                    selected,
+                    playing,
+                    kind,
+                    title,
+                    source_id,
+                    detail,
+                    availability,
+                    status: Self::availability_label(availability),
+                },
             );
-            buffer.set_string(
-                0,
-                row + 1,
-                format!("             {detail} • {availability}"),
-                base,
-            );
-
-            if selected && self.current.active_pane == ActivePane::List {
-                let selected = Self::selected_style();
-                buffer.set_style(Self::dense_list_selection_area(row, 2), selected);
-            }
         }
 
         self.render_now_playing(buffer, base);
@@ -1139,17 +1239,187 @@ impl Application {
         }
     }
 
+    fn render_stations(&self, buffer: &mut Buffer, base: Style) {
+        let stations = self.catalog.stations();
+        buffer.set_string(0, 0, " SONGDIAL / RADIO STATIONS", base);
+        buffer.set_string(0, 2, "  RADIO STATIONS", base);
+        buffer.set_string(0, 3, "  Continuous music from every Source.", base);
+        buffer.set_string(
+            0,
+            4,
+            format!(
+                "  {} Stations • Station {}/{}",
+                stations.len(),
+                self.current.selection + 1,
+                stations.len()
+            ),
+            base,
+        );
+
+        for (slot, station) in stations
+            .iter()
+            .skip(self.current.scroll_offset)
+            .take(7)
+            .enumerate()
+        {
+            let index = self.current.scroll_offset + slot;
+            let selected = index == self.current.selection;
+            let playing = matches!(
+                &self.playback,
+                Some(PlaybackSession::Station { station_id, .. }) if station_id == station.id()
+            );
+            let row = 6 + (slot as u16 * 2);
+            self.render_dense_catalog_row(
+                buffer,
+                base,
+                DenseCatalogRow {
+                    row,
+                    selected,
+                    playing,
+                    kind: "STATION",
+                    title: station.name(),
+                    source_id: station.source_id(),
+                    detail: station.style(),
+                    availability: station.availability(),
+                    status: Self::availability_label(station.availability()),
+                },
+            );
+        }
+
+        self.render_now_playing(buffer, base);
+        buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter inspect", base);
+        let selected_is_unavailable = stations
+            .get(self.current.selection)
+            .is_some_and(|station| matches!(station.availability(), Availability::Unavailable(_)));
+        buffer.set_string(
+            0,
+            self.guide_top() + 1,
+            if selected_is_unavailable {
+                " p unavailable  n queue  Esc back"
+            } else {
+                " p play  n queue  Esc back"
+            },
+            base,
+        );
+    }
+
+    fn render_playlists(&self, buffer: &mut Buffer, base: Style) {
+        let playlists = self.catalog.playlists();
+        buffer.set_string(0, 0, " SONGDIAL / MY PLAYLISTS", base);
+        buffer.set_string(0, 2, "  MY PLAYLISTS", base);
+        buffer.set_string(
+            0,
+            3,
+            "  Personal and saved Playlists from every Source.",
+            base,
+        );
+        if playlists.is_empty() {
+            buffer.set_string(0, 4, "  0 Playlists", base);
+            buffer.set_string(0, 7, "  No Playlists are saved in the Demo catalog.", base);
+            buffer.set_string(
+                0,
+                8,
+                "  Esc returns Home to choose another listening path.",
+                base,
+            );
+        } else {
+            buffer.set_string(
+                0,
+                4,
+                format!(
+                    "  {} Playlists • Playlist {}/{}",
+                    playlists.len(),
+                    self.current.selection + 1,
+                    playlists.len()
+                ),
+                base,
+            );
+        }
+
+        for (slot, playlist) in playlists
+            .iter()
+            .skip(self.current.scroll_offset)
+            .take(7)
+            .enumerate()
+        {
+            let index = self.current.scroll_offset + slot;
+            let selected = index == self.current.selection;
+            let playing = matches!(
+                &self.playback,
+                Some(PlaybackSession::Track {
+                    origin_playlist_id: Some(playlist_id),
+                    ..
+                }) if playlist_id == playlist.id()
+            );
+            let track_count = playlist.track_ids().len();
+            let track_suffix = if track_count == 1 { "" } else { "s" };
+            let status = if playlist.track_ids().is_empty() {
+                "EMPTY"
+            } else {
+                Self::availability_label(playlist.availability())
+            };
+            let detail = format!("{track_count} Track{track_suffix}");
+            let row = 6 + (slot as u16 * 2);
+            self.render_dense_catalog_row(
+                buffer,
+                base,
+                DenseCatalogRow {
+                    row,
+                    selected,
+                    playing,
+                    kind: "PLAYLIST",
+                    title: playlist.name(),
+                    source_id: playlist.source_id(),
+                    detail: &detail,
+                    availability: playlist.availability(),
+                    status,
+                },
+            );
+        }
+
+        self.render_now_playing(buffer, base);
+        if playlists.is_empty() {
+            buffer.set_string(
+                0,
+                self.guide_top(),
+                " n queue  Esc back  ? help  q quit",
+                base,
+            );
+        } else {
+            buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter inspect", base);
+            let selected_is_empty = playlists
+                .get(self.current.selection)
+                .is_some_and(|playlist| playlist.track_ids().is_empty());
+            buffer.set_string(
+                0,
+                self.guide_top() + 1,
+                if selected_is_empty {
+                    " p unavailable  a unavailable  Esc back"
+                } else {
+                    " p play  a add  Esc back"
+                },
+                base,
+            );
+        }
+    }
+
     fn render_station_details(
         &self,
         buffer: &mut Buffer,
         base: Style,
-        intent_id: &CatalogId,
+        origin: &StationDetailsOrigin,
         station_id: &CatalogId,
     ) {
-        let intent = self
-            .catalog
-            .listening_intent(intent_id)
-            .expect("fixed Station parent intent should exist");
+        let parent = match origin {
+            StationDetailsOrigin::ListeningIntent(intent_id) => {
+                let intent = self
+                    .catalog
+                    .listening_intent(intent_id)
+                    .expect("fixed Station parent intent should exist");
+                format!("MOOD & ACTIVITY / {}", intent.name().to_uppercase())
+            }
+            StationDetailsOrigin::RadioStations => "RADIO STATIONS".to_owned(),
+        };
         let station = self
             .catalog
             .station(station_id)
@@ -1163,11 +1433,7 @@ impl Application {
         buffer.set_string(
             0,
             0,
-            format!(
-                " SONGDIAL / MOOD & ACTIVITY / {} / {}",
-                intent.name().to_uppercase(),
-                station.name().to_uppercase()
-            ),
+            format!(" SONGDIAL / {parent} / {}", station.name().to_uppercase()),
             base,
         );
         buffer.set_string(0, 2, "  STATION", base);
@@ -1200,21 +1466,42 @@ impl Application {
             base,
         );
         self.render_now_playing(buffer, base);
-        buffer.set_string(0, self.guide_top(), " p play  Space pause  n queue", base);
-        buffer.set_string(0, self.guide_top() + 1, " Esc back  ? help", base);
+        if matches!(station.availability(), Availability::Unavailable(_)) {
+            buffer.set_string(
+                0,
+                self.guide_top(),
+                " p unavailable  n queue  Esc back",
+                base,
+            );
+            buffer.set_string(0, self.guide_top() + 1, " ? help  q quit", base);
+        } else {
+            buffer.set_string(0, self.guide_top(), " p play  Space pause  n queue", base);
+            buffer.set_string(0, self.guide_top() + 1, " Esc back  ? help", base);
+        }
     }
 
     fn render_playlist_details(
         &self,
         buffer: &mut Buffer,
         base: Style,
-        intent_id: &CatalogId,
+        origin: &PlaylistDetailsOrigin,
         playlist_id: &CatalogId,
     ) {
-        let intent = self
-            .catalog
-            .listening_intent(intent_id)
-            .expect("fixed Playlist parent intent should exist");
+        let (parent, return_destination) = match origin {
+            PlaylistDetailsOrigin::ListeningIntent(intent_id) => {
+                let intent = self
+                    .catalog
+                    .listening_intent(intent_id)
+                    .expect("fixed Playlist parent intent should exist");
+                (
+                    format!("MOOD & ACTIVITY / {}", intent.name().to_uppercase()),
+                    intent.name().to_owned(),
+                )
+            }
+            PlaylistDetailsOrigin::MyPlaylists => {
+                ("MY PLAYLISTS".to_owned(), "My playlists".to_owned())
+            }
+        };
         let playlist = self
             .catalog
             .playlist(playlist_id)
@@ -1224,11 +1511,7 @@ impl Application {
         buffer.set_string(
             0,
             0,
-            format!(
-                " SONGDIAL / MOOD & ACTIVITY / {} / {}",
-                intent.name().to_uppercase(),
-                playlist.name().to_uppercase()
-            ),
+            format!(" SONGDIAL / {parent} / {}", playlist.name().to_uppercase()),
             base,
         );
         buffer.set_string(0, 2, "  PLAYLIST", base);
@@ -1257,7 +1540,7 @@ impl Application {
                 9,
                 format!(
                     "  Esc returns to {} without changing Now Playing.",
-                    intent.name()
+                    return_destination
                 ),
                 base,
             );
@@ -1315,7 +1598,13 @@ impl Application {
 
         self.render_now_playing(buffer, base);
         if playlist.track_ids().is_empty() {
-            buffer.set_string(0, self.guide_top(), " Esc back  ? help  q quit", base);
+            buffer.set_string(
+                0,
+                self.guide_top(),
+                " p unavailable  a unavailable  Esc back",
+                base,
+            );
+            buffer.set_string(0, self.guide_top() + 1, " n queue  ? help  q quit", base);
         } else {
             buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  p play", base);
             buffer.set_string(0, self.guide_top() + 1, " a add  n queue  Esc back", base);
@@ -1648,6 +1937,8 @@ impl Application {
                 .catalog
                 .listening_intent(intent_id)
                 .map_or("MOOD & ACTIVITY", |intent| intent.name()),
+            Destination::Stations => "RADIO STATIONS",
+            Destination::Playlists => "MY PLAYLISTS",
             Destination::StationDetails { station_id, .. } => self
                 .catalog
                 .station(station_id)
@@ -1685,6 +1976,8 @@ impl Application {
             Destination::Home => "  Home: choose a listening path, then press Enter.",
             Destination::ListeningIntents => "  Mood & activity: choose what fits with Enter.",
             Destination::ListeningIntent(_) => "  Open a Station or Playlist with Enter.",
+            Destination::Stations => "  Radio stations: inspect with Enter or play with p.",
+            Destination::Playlists => "  My playlists: inspect with Enter or play with p.",
             Destination::StationDetails { .. } => {
                 "  Station details: Esc returns to the exact prior selection."
             }
@@ -1737,6 +2030,37 @@ impl Application {
             (true, false, _) => "SELECTED >",
             (false, false, Availability::Loading) => "LOADING ~",
             (false, false, Availability::Available) => "",
+        }
+    }
+
+    const fn availability_label(availability: &Availability) -> &'static str {
+        match availability {
+            Availability::Available => "AVAILABLE",
+            Availability::Loading => "LOADING",
+            Availability::Unavailable(_) => "UNAVAIL",
+        }
+    }
+
+    fn render_dense_catalog_row(&self, buffer: &mut Buffer, base: Style, row: DenseCatalogRow<'_>) {
+        let state = Self::dense_row_state(row.selected, row.playing, row.availability);
+        let source = format!("[{}]", self.catalog.source_badge(row.source_id));
+        buffer.set_string(
+            0,
+            row.row,
+            format!("  {state:<11}{:<10}{:<46}{source:>11}", row.kind, row.title),
+            base,
+        );
+        buffer.set_string(
+            0,
+            row.row + 1,
+            format!("             {} • {}", row.detail, row.status),
+            base,
+        );
+        if row.selected && self.current.active_pane == ActivePane::List {
+            buffer.set_style(
+                Self::dense_list_selection_area(row.row, 2),
+                Self::selected_style(),
+            );
         }
     }
 

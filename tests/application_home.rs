@@ -104,16 +104,24 @@ fn enter_opens_every_home_choice_without_starting_playback() {
         .iter()
         .enumerate()
         .map(|(index, choice)| {
-            let (body, guide) = if index == 0 {
-                (
+            let (body, guide) = match index {
+                0 => (
                     "  MOOD & ACTIVITY".to_owned(),
                     " ↑/k up  ↓/j down  Enter open".to_owned(),
-                )
-            } else {
-                (
+                ),
+                1 => (
+                    "  8 Stations • Station 1/8".to_owned(),
+                    " ↑/k ↓/j move  Enter inspect".to_owned(),
+                ),
+                2 => (
+                    "  5 Playlists • Playlist 1/5".to_owned(),
+                    " ↑/k ↓/j move  Enter inspect".to_owned(),
+                ),
+                3 | 4 => (
                     "  This Destination is not yet available.".to_owned(),
                     " n queue  Esc back  ? help  q quit".to_owned(),
-                )
+                ),
+                _ => unreachable!("Home has exactly five choices"),
             };
             (
                 format!(" SONGDIAL / {choice}"),
@@ -184,7 +192,7 @@ fn help_lists_global_and_destination_keys_without_losing_context() {
                 "  Esc      Go back or close help".to_owned(),
                 "  ?        Show contextual help".to_owned(),
                 "  q / Ctrl+C  Quit".to_owned(),
-                "  This Destination has no additional actions yet.".to_owned(),
+                "  Radio stations: inspect with Enter or play with p.".to_owned(),
                 " NOW PLAYING  Nothing playing".to_owned(),
                 " Esc close  ? close  q quit".to_owned(),
             ],
