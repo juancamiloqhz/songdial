@@ -410,6 +410,49 @@ pub(crate) enum ServiceCatalogItem<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SearchResultGroup {
+    ListeningIntents,
+    Stations,
+    Playlists,
+    Tracks,
+}
+
+impl SearchResultGroup {
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::ListeningIntents => "LISTENING INTENTS",
+            Self::Stations => "STATIONS",
+            Self::Playlists => "PLAYLISTS",
+            Self::Tracks => "TRACKS",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum SearchResult<'a> {
+    ListeningIntent(&'a ListeningIntent),
+    Station(&'a Station),
+    Playlist(&'a Playlist),
+    Track(&'a Track),
+}
+
+impl SearchResult<'_> {
+    pub(crate) const fn group(self) -> SearchResultGroup {
+        match self {
+            Self::ListeningIntent(_) => SearchResultGroup::ListeningIntents,
+            Self::Station(_) => SearchResultGroup::Stations,
+            Self::Playlist(_) => SearchResultGroup::Playlists,
+            Self::Track(_) => SearchResultGroup::Tracks,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SearchResults<'a> {
+    pub(crate) items: Vec<SearchResult<'a>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ServiceCatalogCounts {
     pub(crate) stations: usize,
     pub(crate) playlists: usize,
@@ -948,6 +991,94 @@ impl DemoCatalog {
         ServiceCatalogView { items, counts }
     }
 
+    pub(crate) fn search(&self, query: &str) -> SearchResults<'_> {
+        let normalized_query = query
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
+        if normalized_query.is_empty() {
+            return SearchResults { items: Vec::new() };
+        }
+        let tokens = normalized_query.split_whitespace().collect::<Vec<_>>();
+
+        let listening_intents = ranked_search_results(
+            &self.listening_intents,
+            |intent| {
+                search_rank(
+                    intent.name(),
+                    &[intent.name(), intent.description()],
+                    &normalized_query,
+                    &tokens,
+                )
+            },
+            SearchResult::ListeningIntent,
+        );
+        let stations = ranked_search_results(
+            &self.stations,
+            |station| {
+                let source = self.service(station.source_id());
+                search_rank(
+                    station.name(),
+                    &[
+                        station.name(),
+                        station.style(),
+                        station.description(),
+                        source.map_or("", Service::name),
+                        source.map_or("", Service::badge),
+                    ],
+                    &normalized_query,
+                    &tokens,
+                )
+            },
+            SearchResult::Station,
+        );
+        let playlists = ranked_search_results(
+            &self.playlists,
+            |playlist| {
+                let source = self.service(playlist.source_id());
+                search_rank(
+                    playlist.name(),
+                    &[
+                        playlist.name(),
+                        playlist.description(),
+                        source.map_or("", Service::name),
+                        source.map_or("", Service::badge),
+                    ],
+                    &normalized_query,
+                    &tokens,
+                )
+            },
+            SearchResult::Playlist,
+        );
+        let tracks = ranked_search_results(
+            &self.tracks,
+            |track| {
+                let source = self.service(track.source_id());
+                search_rank(
+                    track.name(),
+                    &[
+                        track.name(),
+                        track.creator(),
+                        source.map_or("", Service::name),
+                        source.map_or("", Service::badge),
+                    ],
+                    &normalized_query,
+                    &tokens,
+                )
+            },
+            SearchResult::Track,
+        );
+
+        let items = listening_intents
+            .into_iter()
+            .chain(stations)
+            .chain(playlists)
+            .chain(tracks)
+            .collect();
+        SearchResults { items }
+    }
+
     pub(crate) fn source_badge(&self, source_id: &CatalogId) -> &str {
         self.service(source_id).map_or("UNKNOWN", Service::badge)
     }
@@ -956,4 +1087,44 @@ impl DemoCatalog {
         self.service(source_id)
             .map_or("Unknown Source", Service::name)
     }
+}
+
+fn ranked_search_results<'a, T>(
+    items: &'a [T],
+    rank: impl Fn(&T) -> Option<u8>,
+    result: impl Fn(&'a T) -> SearchResult<'a>,
+) -> Vec<SearchResult<'a>> {
+    let mut ranked = items
+        .iter()
+        .filter_map(|item| rank(item).map(|rank| (rank, result(item))))
+        .collect::<Vec<_>>();
+    ranked.sort_by_key(|(rank, _)| *rank);
+    ranked.into_iter().map(|(_, result)| result).collect()
+}
+
+fn search_rank(
+    title: &str,
+    searchable_fields: &[&str],
+    normalized_query: &str,
+    tokens: &[&str],
+) -> Option<u8> {
+    let normalized_fields = searchable_fields
+        .iter()
+        .map(|field| field.to_lowercase())
+        .collect::<Vec<_>>();
+    if !tokens
+        .iter()
+        .all(|token| normalized_fields.iter().any(|field| field.contains(token)))
+    {
+        return None;
+    }
+
+    let normalized_title = title.to_lowercase();
+    Some(if normalized_title == normalized_query {
+        0
+    } else if normalized_title.starts_with(normalized_query) {
+        1
+    } else {
+        2
+    })
 }

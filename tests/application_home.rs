@@ -122,8 +122,8 @@ fn enter_opens_every_home_choice_without_starting_playback() {
                     " ↑/k ↓/j move  Enter open".to_owned(),
                 ),
                 4 => (
-                    "  This Destination is not yet available.".to_owned(),
-                    " n queue  Esc back  ? help  q quit".to_owned(),
+                    "  Start typing to search the Demo catalog.".to_owned(),
+                    " Type to search  Backspace erase".to_owned(),
                 ),
                 _ => unreachable!("Home has exactly five choices"),
             };
@@ -173,7 +173,7 @@ fn help_lists_global_and_destination_keys_without_losing_context() {
 
     application.handle_event(Event::Key(Key::Char('?')));
     let help = lines(&application.render());
-    let help_excerpt = [0, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 20, 22]
+    let help_excerpt = [0, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20, 22]
         .map(|row| help[row].trim_end().to_owned());
 
     application.handle_event(Event::Key(Key::Escape));
@@ -192,6 +192,7 @@ fn help_lists_global_and_destination_keys_without_losing_context() {
                 "  Space    Pause, resume, or restart".to_owned(),
                 "  a        Add a Track or Playlist to the Queue".to_owned(),
                 "  d        Remove the selected queued Track".to_owned(),
+                "  /        Open Search or focus its query".to_owned(),
                 "  n        Open Now Playing and Queue".to_owned(),
                 "  Esc      Go back or close help".to_owned(),
                 "  ?        Show contextual help".to_owned(),

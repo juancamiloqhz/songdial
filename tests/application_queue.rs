@@ -154,10 +154,11 @@ fn queue_actions_are_discoverable_and_station_details_explain_the_add_limit() {
     assert!(track_guide[23].contains("a add"));
     assert!(track_guide[23].contains("n queue"));
     assert_eq!(
-        [9, 10, 11, 12, 13, 14, 16].map(|row| help[row].trim_end().to_owned()),
+        [9, 10, 11, 12, 13, 14, 15, 16].map(|row| help[row].trim_end().to_owned()),
         [
             "  a        Add a Track or Playlist to the Queue",
             "  d        Remove the selected queued Track",
+            "  /        Open Search or focus its query",
             "  n        Open Now Playing and Queue",
             "  Esc      Go back or close help",
             "  ?        Show contextual help",

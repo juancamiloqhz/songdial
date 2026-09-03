@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     Availability, CatalogId, DemoCatalog,
-    catalog::{IntentMatch, Playlist, ServiceCatalogItem, Station, Track},
+    catalog::{IntentMatch, Playlist, SearchResult, ServiceCatalogItem, Station, Track},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,23 +33,18 @@ impl HomeChoice {
         match self {
             Self::ListeningIntents => HomeChoiceText {
                 label: "Mood & activity",
-                title: "MOOD & ACTIVITY",
             },
             Self::Stations => HomeChoiceText {
                 label: "Radio stations",
-                title: "RADIO STATIONS",
             },
             Self::Playlists => HomeChoiceText {
                 label: "My playlists",
-                title: "MY PLAYLISTS",
             },
             Self::Services => HomeChoiceText {
                 label: "Browse services",
-                title: "BROWSE SERVICES",
             },
             Self::Search => HomeChoiceText {
                 label: "Search everything",
-                title: "SEARCH EVERYTHING",
             },
         }
     }
@@ -57,7 +52,6 @@ impl HomeChoice {
 
 struct HomeChoiceText {
     label: &'static str,
-    title: &'static str,
 }
 
 struct DenseCatalogRow<'a> {
@@ -98,6 +92,35 @@ impl ServiceCatalogItemProjection<'_> {
     }
 }
 
+struct SearchResultProjection<'a> {
+    details_destination: Destination,
+    playback_start: PlaybackStartOutcome,
+    queue_addition: Option<QueueAddition>,
+    queue_is_applicable: bool,
+    playing: bool,
+    kind: &'static str,
+    title: &'a str,
+    source_id: Option<&'a CatalogId>,
+    availability: &'a Availability,
+}
+
+impl SearchResultProjection<'_> {
+    fn can_play(&self) -> bool {
+        matches!(self.playback_start, PlaybackStartOutcome::Ready(_))
+    }
+
+    fn can_queue(&self) -> bool {
+        self.queue_addition.as_ref().is_some_and(Result::is_ok)
+    }
+
+    fn play_is_applicable(&self) -> bool {
+        !matches!(
+            self.playback_start,
+            PlaybackStartOutcome::NoPlayableSelected
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Viewport {
     width: u16,
@@ -116,6 +139,7 @@ pub enum Key {
     Up,
     Down,
     Enter,
+    Backspace,
     Escape,
     CtrlC,
     Char(char),
@@ -176,6 +200,7 @@ enum Destination {
     Playlists,
     Services,
     ServiceCatalog(CatalogId),
+    Search,
     StationDetails {
         origin: StationDetailsOrigin,
         station_id: CatalogId,
@@ -189,7 +214,6 @@ enum Destination {
         origin: TrackDetailsOrigin,
         track_id: CatalogId,
     },
-    NotYetAvailable(HomeChoice),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -197,6 +221,7 @@ enum StationDetailsOrigin {
     ListeningIntent(CatalogId),
     RadioStations,
     ServiceCatalog(CatalogId),
+    Search,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -204,11 +229,13 @@ enum PlaylistDetailsOrigin {
     ListeningIntent(CatalogId),
     MyPlaylists,
     ServiceCatalog(CatalogId),
+    Search,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum TrackDetailsOrigin {
     ServiceCatalog(CatalogId),
+    Search,
     Queue,
 }
 
@@ -224,14 +251,17 @@ struct DestinationSnapshot {
     selection: usize,
     scroll_offset: usize,
     active_pane: ActivePane,
+    query: String,
+    query_focused: bool,
 }
 
 impl DestinationSnapshot {
     const fn new(destination: Destination) -> Self {
+        let query_focused = matches!(destination, Destination::Search);
         let active_pane = match &destination {
-            Destination::StationDetails { .. }
-            | Destination::TrackDetails { .. }
-            | Destination::NotYetAvailable(_) => ActivePane::Details,
+            Destination::StationDetails { .. } | Destination::TrackDetails { .. } => {
+                ActivePane::Details
+            }
             Destination::Home
             | Destination::ListeningIntents
             | Destination::ListeningIntent(_)
@@ -239,6 +269,7 @@ impl DestinationSnapshot {
             | Destination::Playlists
             | Destination::Services
             | Destination::ServiceCatalog(_)
+            | Destination::Search
             | Destination::PlaylistDetails { .. }
             | Destination::NowPlaying => ActivePane::List,
         };
@@ -247,6 +278,8 @@ impl DestinationSnapshot {
             selection: 0,
             scroll_offset: 0,
             active_pane,
+            query: String::new(),
+            query_focused,
         }
     }
 }
@@ -400,21 +433,58 @@ impl Application {
             };
         };
 
-        if matches!(key, Key::Char('q') | Key::CtrlC) {
+        if key == Key::CtrlC {
             return Effect::Quit;
         }
 
         if !self.viewport.is_supported() {
+            return if key == Key::Char('q') {
+                Effect::Quit
+            } else {
+                Effect::None
+            };
+        }
+
+        if self.help_visible {
+            return match key {
+                Key::Char('q') => Effect::Quit,
+                Key::Escape | Key::Char('?') => {
+                    self.help_visible = false;
+                    Effect::None
+                }
+                _ => Effect::None,
+            };
+        }
+
+        if self.current.destination == Destination::Search && self.current.query_focused {
+            match key {
+                Key::Escape => self.current.query_focused = false,
+                Key::Backspace => {
+                    self.current.query.pop();
+                    self.current.selection = 0;
+                    self.current.scroll_offset = 0;
+                }
+                Key::Char('/') => {}
+                Key::Char('?') => self.help_visible = true,
+                Key::Char(character) => {
+                    self.current.query.push(character);
+                    self.current.selection = 0;
+                    self.current.scroll_offset = 0;
+                }
+                Key::Down => self.move_selection_down(),
+                Key::Up => self.move_selection_up(),
+                Key::Enter => self.open_selected(),
+                Key::CtrlC => unreachable!("Ctrl+C handled above"),
+            }
             return Effect::None;
+        }
+
+        if key == Key::Char('q') {
+            return Effect::Quit;
         }
 
         if key == Key::Char('?') {
             self.help_visible = !self.help_visible;
-            return Effect::None;
-        }
-
-        if self.help_visible && key == Key::Escape {
-            self.help_visible = false;
             return Effect::None;
         }
 
@@ -427,8 +497,9 @@ impl Application {
             Key::Char('a') => self.add_selected_to_queue(),
             Key::Char('d') => self.remove_selected_from_queue(),
             Key::Char('n') => self.open_now_playing(),
+            Key::Char('/') => self.open_or_focus_search(),
             Key::Char(' ') => self.toggle_playback(),
-            Key::Char(_) | Key::CtrlC => {}
+            Key::Char(_) | Key::Backspace | Key::CtrlC => {}
         }
 
         Effect::None
@@ -508,8 +579,18 @@ impl Application {
                 self.service_catalog_item_projection(service_id, *item)
                     .queue_addition
             }
+            Destination::Search => {
+                let results = self.catalog.search(&self.current.query);
+                let Some(result) = results.items.get(self.current.selection).copied() else {
+                    return;
+                };
+                let Some(addition) = self.search_result_projection(result).queue_addition else {
+                    return;
+                };
+                addition
+            }
             Destination::TrackDetails {
-                origin: TrackDetailsOrigin::ServiceCatalog(_),
+                origin: TrackDetailsOrigin::ServiceCatalog(_) | TrackDetailsOrigin::Search,
                 track_id,
             } => {
                 let Some(track) = self.catalog.track(track_id) else {
@@ -523,8 +604,7 @@ impl Application {
             | Destination::TrackDetails {
                 origin: TrackDetailsOrigin::Queue,
                 ..
-            }
-            | Destination::NotYetAvailable(_) => return,
+            } => return,
             Destination::Services => return,
             Destination::Stations | Destination::StationDetails { .. } => {
                 Err("Stations are continuous and cannot be queued.".to_owned())
@@ -684,6 +764,82 @@ impl Application {
         }
     }
 
+    fn search_result_projection<'a>(&self, result: SearchResult<'a>) -> SearchResultProjection<'a> {
+        match result {
+            SearchResult::ListeningIntent(intent) => SearchResultProjection {
+                details_destination: Destination::ListeningIntent(intent.id().clone()),
+                playback_start: PlaybackStartOutcome::NoPlayableSelected,
+                queue_addition: None,
+                queue_is_applicable: false,
+                playing: false,
+                kind: "INTENT",
+                title: intent.name(),
+                source_id: None,
+                availability: &Availability::Available,
+            },
+            SearchResult::Station(station) => SearchResultProjection {
+                details_destination: Destination::StationDetails {
+                    origin: StationDetailsOrigin::Search,
+                    station_id: station.id().clone(),
+                },
+                playback_start: Self::station_playback_start(station),
+                queue_addition: Some(Err(
+                    "Stations are continuous and cannot be queued.".to_owned()
+                )),
+                queue_is_applicable: false,
+                playing: matches!(
+                    &self.playback,
+                    Some(PlaybackSession::Station { station_id, .. })
+                        if station_id == station.id()
+                ),
+                kind: "STATION",
+                title: station.name(),
+                source_id: Some(station.source_id()),
+                availability: station.availability(),
+            },
+            SearchResult::Playlist(playlist) => SearchResultProjection {
+                details_destination: Destination::PlaylistDetails {
+                    origin: PlaylistDetailsOrigin::Search,
+                    playlist_id: playlist.id().clone(),
+                },
+                playback_start: self.playlist_playback_start(playlist),
+                queue_addition: Some(self.playlist_queue_addition(playlist)),
+                queue_is_applicable: true,
+                playing: matches!(
+                    &self.playback,
+                    Some(PlaybackSession::Track {
+                        origin_playlist_id: Some(playlist_id),
+                        ..
+                    }) if playlist_id == playlist.id()
+                ),
+                kind: "PLAYLIST",
+                title: playlist.name(),
+                source_id: Some(playlist.source_id()),
+                availability: playlist.availability(),
+            },
+            SearchResult::Track(track) => SearchResultProjection {
+                details_destination: Destination::TrackDetails {
+                    origin: TrackDetailsOrigin::Search,
+                    track_id: track.id().clone(),
+                },
+                playback_start: Self::track_playback_start(track),
+                queue_addition: Some(Self::track_queue_addition(track)),
+                queue_is_applicable: true,
+                playing: matches!(
+                    &self.playback,
+                    Some(PlaybackSession::Track {
+                        current_track_id,
+                        ..
+                    }) if current_track_id == track.id()
+                ),
+                kind: "TRACK",
+                title: track.name(),
+                source_id: Some(track.source_id()),
+                availability: track.availability(),
+            },
+        }
+    }
+
     fn advance_playback_tick(&mut self) {
         let Some(PlaybackSession::Track {
             current_track_id,
@@ -834,6 +990,15 @@ impl Application {
                     },
                 )
             }
+            Destination::Search => self
+                .catalog
+                .search(&self.current.query)
+                .items
+                .get(self.current.selection)
+                .copied()
+                .map_or(PlaybackStartOutcome::NoPlayableSelected, |result| {
+                    self.search_result_projection(result).playback_start
+                }),
             Destination::StationDetails { station_id, .. } => self
                 .catalog
                 .station(station_id)
@@ -879,7 +1044,7 @@ impl Application {
                 })
             }
             Destination::TrackDetails {
-                origin: TrackDetailsOrigin::ServiceCatalog(_),
+                origin: TrackDetailsOrigin::ServiceCatalog(_) | TrackDetailsOrigin::Search,
                 track_id,
             } => self
                 .catalog
@@ -893,8 +1058,7 @@ impl Application {
             | Destination::TrackDetails {
                 origin: TrackDetailsOrigin::Queue,
                 ..
-            }
-            | Destination::NotYetAvailable(_) => PlaybackStartOutcome::NoPlayableSelected,
+            } => PlaybackStartOutcome::NoPlayableSelected,
         }
     }
 
@@ -999,14 +1163,13 @@ impl Application {
             Destination::Stations => 7,
             Destination::Playlists => 7,
             Destination::ServiceCatalog(_) => 7,
+            Destination::Search => 9,
             Destination::PlaylistDetails { .. } => 13,
             Destination::NowPlaying => self.queue_visible_items(),
             Destination::Home => HomeChoice::ALL.len(),
             Destination::ListeningIntents => self.catalog.listening_intents().len(),
             Destination::Services => self.catalog.services().len(),
-            Destination::StationDetails { .. }
-            | Destination::TrackDetails { .. }
-            | Destination::NotYetAvailable(_) => 0,
+            Destination::StationDetails { .. } | Destination::TrackDetails { .. } => 0,
         };
 
         if visible_items == 0 || self.current.selection < self.current.scroll_offset {
@@ -1026,6 +1189,7 @@ impl Application {
             Destination::ServiceCatalog(service_id) => {
                 self.catalog.service_catalog(service_id).items.len()
             }
+            Destination::Search => self.catalog.search(&self.current.query).items.len(),
             Destination::ListeningIntent(intent_id) => self.catalog.intent_matches(intent_id).len(),
             Destination::PlaylistDetails { playlist_id, .. } => self
                 .catalog
@@ -1035,9 +1199,7 @@ impl Application {
                 Some(PlaybackSession::Track { queue, .. }) => queue.len(),
                 Some(PlaybackSession::Station { .. }) | None => 0,
             },
-            Destination::StationDetails { .. }
-            | Destination::TrackDetails { .. }
-            | Destination::NotYetAvailable(_) => 0,
+            Destination::StationDetails { .. } | Destination::TrackDetails { .. } => 0,
         }
     }
 
@@ -1050,7 +1212,7 @@ impl Application {
                     HomeChoice::Stations => Destination::Stations,
                     HomeChoice::Playlists => Destination::Playlists,
                     HomeChoice::Services => Destination::Services,
-                    HomeChoice::Search => Destination::NotYetAvailable(choice),
+                    HomeChoice::Search => Destination::Search,
                 }
             }
             Destination::ListeningIntents => self
@@ -1108,6 +1270,13 @@ impl Application {
                 self.service_catalog_item_projection(&service_id, *item)
                     .details_destination
             }
+            Destination::Search => {
+                let results = self.catalog.search(&self.current.query);
+                let Some(result) = results.items.get(self.current.selection).copied() else {
+                    return;
+                };
+                self.search_result_projection(result).details_destination
+            }
             Destination::NowPlaying => {
                 let Some(PlaybackSession::Track { queue, .. }) = &self.playback else {
                     return;
@@ -1122,8 +1291,7 @@ impl Application {
             }
             Destination::StationDetails { .. }
             | Destination::PlaylistDetails { .. }
-            | Destination::TrackDetails { .. }
-            | Destination::NotYetAvailable(_) => return,
+            | Destination::TrackDetails { .. } => return,
         };
 
         self.history.push(self.current.clone());
@@ -1136,6 +1304,15 @@ impl Application {
         }
         self.history.push(self.current.clone());
         self.current = DestinationSnapshot::new(Destination::NowPlaying);
+    }
+
+    fn open_or_focus_search(&mut self) {
+        if self.current.destination == Destination::Search {
+            self.current.query_focused = true;
+            return;
+        }
+        self.history.push(self.current.clone());
+        self.current = DestinationSnapshot::new(Destination::Search);
     }
 
     fn restore_previous_destination(&mut self) {
@@ -1190,6 +1367,7 @@ impl Application {
             Destination::ServiceCatalog(service_id) => {
                 self.render_service_catalog(buffer, base, service_id);
             }
+            Destination::Search => self.render_search(buffer, base),
             Destination::StationDetails { origin, station_id } => {
                 self.render_station_details(buffer, base, origin, station_id)
             }
@@ -1200,25 +1378,6 @@ impl Application {
             Destination::NowPlaying => self.render_now_playing_destination(buffer, base),
             Destination::TrackDetails { origin, track_id } => {
                 self.render_track_details(buffer, base, origin, track_id);
-            }
-            Destination::NotYetAvailable(choice) => {
-                let title = choice.text().title;
-                buffer.set_string(0, 0, format!(" SONGDIAL / {title}"), base);
-                buffer.set_string(0, 2, format!("  {title}"), base);
-                buffer.set_string(0, 4, "  This Destination is not yet available.", base);
-                buffer.set_string(
-                    0,
-                    5,
-                    "  Return Home to choose another listening path.",
-                    base,
-                );
-                self.render_now_playing(buffer, base);
-                buffer.set_string(
-                    0,
-                    self.guide_top(),
-                    " n queue  Esc back  ? help  q quit",
-                    base,
-                );
             }
         }
     }
@@ -1629,6 +1788,143 @@ impl Application {
         buffer.set_string(0, self.guide_top() + 1, " n queue  Esc back  ? help", base);
     }
 
+    fn render_search(&self, buffer: &mut Buffer, base: Style) {
+        buffer.set_string(0, 0, " SONGDIAL / SEARCH EVERYTHING", base);
+        buffer.set_string(0, 2, "  SEARCH EVERYTHING", base);
+        buffer.set_string(
+            0,
+            3,
+            format!(
+                "  Query {} {}",
+                if self.current.query_focused { '>' } else { ' ' },
+                self.current.query
+            ),
+            base,
+        );
+        let results = self.catalog.search(&self.current.query);
+        if self.current.query.trim().is_empty() {
+            buffer.set_string(0, 4, "  Start typing to search the Demo catalog.", base);
+        } else if results.items.is_empty() {
+            buffer.set_string(
+                0,
+                4,
+                format!("  No results for “{}”.", self.current.query),
+                base,
+            );
+        } else {
+            buffer.set_string(
+                0,
+                4,
+                format!(
+                    "  {} result{} • Result {}/{}",
+                    results.items.len(),
+                    if results.items.len() == 1 { "" } else { "s" },
+                    self.current.selection + 1,
+                    results.items.len()
+                ),
+                base,
+            );
+
+            let visible = results
+                .items
+                .iter()
+                .skip(self.current.scroll_offset)
+                .take(9);
+            let mut row = 6;
+            let mut previous_group = None;
+            for (slot, result) in visible.enumerate() {
+                let group = result.group();
+                if previous_group != Some(group) {
+                    let group_count = results
+                        .items
+                        .iter()
+                        .filter(|item| item.group() == group)
+                        .count();
+                    buffer.set_string(0, row, format!("  {} • {group_count}", group.label()), base);
+                    row += 1;
+                    previous_group = Some(group);
+                }
+                let index = self.current.scroll_offset + slot;
+                self.render_search_result(
+                    buffer,
+                    base,
+                    row,
+                    index == self.current.selection,
+                    *result,
+                );
+                row += 1;
+            }
+        }
+        self.render_now_playing(buffer, base);
+        if self.current.query_focused {
+            buffer.set_string(
+                0,
+                self.guide_top(),
+                " Type to search  Backspace erase",
+                base,
+            );
+            buffer.set_string(
+                0,
+                self.guide_top() + 1,
+                " ↑/↓ move  Enter inspect  Esc done",
+                base,
+            );
+        } else {
+            buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter inspect", base);
+            let actions = results.items.get(self.current.selection).copied().map_or(
+                " / edit query  n queue  Esc back",
+                |result| {
+                    let projection = self.search_result_projection(result);
+                    match (
+                        projection.play_is_applicable(),
+                        projection.can_play(),
+                        projection.queue_is_applicable,
+                        projection.can_queue(),
+                    ) {
+                        (false, _, _, _) => " / edit query  n queue  Esc back",
+                        (true, false, false, _) => " p unavailable  / edit  Esc back",
+                        (true, true, false, _) => " p play  / edit query  Esc back",
+                        (_, false, true, _) => " p unavailable  a unavailable  Esc back",
+                        (_, true, true, false) => " p play  a unavailable  Esc back",
+                        (_, true, true, true) => " p play  a add  / edit  Esc back",
+                    }
+                },
+            );
+            buffer.set_string(0, self.guide_top() + 1, actions, base);
+        }
+    }
+
+    fn render_search_result(
+        &self,
+        buffer: &mut Buffer,
+        base: Style,
+        row: u16,
+        selected: bool,
+        result: SearchResult<'_>,
+    ) {
+        let projection = self.search_result_projection(result);
+        let state = Self::dense_row_state(selected, projection.playing, projection.availability);
+        let source = projection
+            .source_id
+            .map(|source_id| format!("[{}]", self.catalog.source_badge(source_id)))
+            .unwrap_or_default();
+        buffer.set_string(
+            0,
+            row,
+            format!(
+                "  {state:<11}{:<10}{:<44}{source:>11}",
+                projection.kind, projection.title
+            ),
+            base,
+        );
+        if selected {
+            buffer.set_style(
+                Self::dense_list_selection_area(row, 1),
+                Self::selected_style(),
+            );
+        }
+    }
+
     fn render_service_catalog(&self, buffer: &mut Buffer, base: Style, service_id: &CatalogId) {
         let service = self
             .catalog
@@ -1731,6 +2027,7 @@ impl Application {
             StationDetailsOrigin::ServiceCatalog(service_id) => {
                 self.service_catalog_breadcrumb(service_id)
             }
+            StationDetailsOrigin::Search => "SEARCH EVERYTHING".to_owned(),
         };
         let station = self
             .catalog
@@ -1817,6 +2114,7 @@ impl Application {
                 self.service_catalog_breadcrumb(service_id),
                 self.catalog.source_name(service_id).to_owned(),
             ),
+            PlaylistDetailsOrigin::Search => ("SEARCH EVERYTHING".to_owned(), "Search".to_owned()),
         };
         let playlist = self
             .catalog
@@ -2065,6 +2363,7 @@ impl Application {
             TrackDetailsOrigin::ServiceCatalog(service_id) => {
                 self.service_catalog_breadcrumb(service_id)
             }
+            TrackDetailsOrigin::Search => "SEARCH EVERYTHING".to_owned(),
             TrackDetailsOrigin::Queue => "NOW PLAYING".to_owned(),
         };
         let status = match track.availability() {
@@ -2100,7 +2399,10 @@ impl Application {
         if let Availability::Unavailable(reason) = track.availability() {
             buffer.set_string(0, 11, format!("  {reason}"), base);
         }
-        if matches!(origin, TrackDetailsOrigin::ServiceCatalog(_)) {
+        if matches!(
+            origin,
+            TrackDetailsOrigin::ServiceCatalog(_) | TrackDetailsOrigin::Search
+        ) {
             buffer.set_string(
                 0,
                 12,
@@ -2110,7 +2412,7 @@ impl Application {
         }
         self.render_now_playing(buffer, base);
         match origin {
-            TrackDetailsOrigin::ServiceCatalog(_) => {
+            TrackDetailsOrigin::ServiceCatalog(_) | TrackDetailsOrigin::Search => {
                 let unavailable = matches!(track.availability(), Availability::Unavailable(_));
                 buffer.set_string(
                     0,
@@ -2305,6 +2607,7 @@ impl Application {
                 .catalog
                 .service(service_id)
                 .map_or("BROWSE SERVICES", |service| service.name()),
+            Destination::Search => "SEARCH EVERYTHING",
             Destination::StationDetails { station_id, .. } => self
                 .catalog
                 .station(station_id)
@@ -2318,7 +2621,6 @@ impl Application {
                 .catalog
                 .track(track_id)
                 .map_or("TRACK", |track| track.name()),
-            Destination::NotYetAvailable(choice) => choice.text().title,
         };
         buffer.set_string(0, 0, format!(" SONGDIAL / {destination} / HELP"), base);
         buffer.set_string(0, 2, "  COMPLETE KEY GUIDE", base);
@@ -2334,10 +2636,11 @@ impl Application {
             base,
         );
         buffer.set_string(0, 10, "  d        Remove the selected queued Track", base);
-        buffer.set_string(0, 11, "  n        Open Now Playing and Queue", base);
-        buffer.set_string(0, 12, "  Esc      Go back or close help", base);
-        buffer.set_string(0, 13, "  ?        Show contextual help", base);
-        buffer.set_string(0, 14, "  q / Ctrl+C  Quit", base);
+        buffer.set_string(0, 11, "  /        Open Search or focus its query", base);
+        buffer.set_string(0, 12, "  n        Open Now Playing and Queue", base);
+        buffer.set_string(0, 13, "  Esc      Go back or close help", base);
+        buffer.set_string(0, 14, "  ?        Show contextual help", base);
+        buffer.set_string(0, 15, "  q / Ctrl+C  Quit", base);
         let local_help = match &self.current.destination {
             Destination::Home => "  Home: choose a listening path, then press Enter.",
             Destination::ListeningIntents => "  Mood & activity: choose what fits with Enter.",
@@ -2348,6 +2651,7 @@ impl Application {
             Destination::ServiceCatalog(_) => {
                 "  Service catalog: inspect shared Stations, Playlists, and Tracks."
             }
+            Destination::Search => "  Search everything: type a query, then inspect a result.",
             Destination::StationDetails { .. } => {
                 "  Station details: Esc returns to the exact prior selection."
             }
@@ -2365,7 +2669,10 @@ impl Application {
                 origin: TrackDetailsOrigin::ServiceCatalog(_),
                 ..
             } => "  Service Track details: Esc restores the exact catalog selection.",
-            Destination::NotYetAvailable(_) => "  This Destination has no additional actions yet.",
+            Destination::TrackDetails {
+                origin: TrackDetailsOrigin::Search,
+                ..
+            } => "  Search Track details: Esc restores the exact Search result.",
         };
         buffer.set_string(0, 16, local_help, base);
         self.render_now_playing(buffer, base);
