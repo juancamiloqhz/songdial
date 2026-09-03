@@ -410,6 +410,58 @@ pub(crate) enum ServiceCatalogItem<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SearchResultGroup {
+    ListeningIntents,
+    Stations,
+    Playlists,
+    Tracks,
+}
+
+impl SearchResultGroup {
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::ListeningIntents => "LISTENING INTENTS",
+            Self::Stations => "STATIONS",
+            Self::Playlists => "PLAYLISTS",
+            Self::Tracks => "TRACKS",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum SearchResult<'a> {
+    ListeningIntent(&'a ListeningIntent),
+    Station(&'a Station),
+    Playlist(&'a Playlist),
+    Track(&'a Track),
+}
+
+impl<'a> SearchResult<'a> {
+    pub(crate) const fn group(self) -> SearchResultGroup {
+        match self {
+            Self::ListeningIntent(_) => SearchResultGroup::ListeningIntents,
+            Self::Station(_) => SearchResultGroup::Stations,
+            Self::Playlist(_) => SearchResultGroup::Playlists,
+            Self::Track(_) => SearchResultGroup::Tracks,
+        }
+    }
+
+    pub(crate) fn title(self) -> &'a str {
+        match self {
+            Self::ListeningIntent(intent) => intent.name(),
+            Self::Station(station) => station.name(),
+            Self::Playlist(playlist) => playlist.name(),
+            Self::Track(track) => track.name(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SearchResults<'a> {
+    pub(crate) items: Vec<SearchResult<'a>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ServiceCatalogCounts {
     pub(crate) stations: usize,
     pub(crate) playlists: usize,
@@ -948,6 +1000,104 @@ impl DemoCatalog {
         ServiceCatalogView { items, counts }
     }
 
+    pub(crate) fn search(&self, query: &str) -> SearchResults<'_> {
+        let normalized_query = query
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
+        if normalized_query.is_empty() {
+            return SearchResults { items: Vec::new() };
+        }
+        let tokens = normalized_query.split_whitespace().collect::<Vec<_>>();
+
+        let mut listening_intents = self
+            .listening_intents
+            .iter()
+            .filter_map(|intent| {
+                search_rank(
+                    intent.name(),
+                    &[intent.name(), intent.description()],
+                    &normalized_query,
+                    &tokens,
+                )
+                .map(|rank| (rank, SearchResult::ListeningIntent(intent)))
+            })
+            .collect::<Vec<_>>();
+        let mut stations = self
+            .stations
+            .iter()
+            .filter_map(|station| {
+                let source = self.service(station.source_id());
+                search_rank(
+                    station.name(),
+                    &[
+                        station.name(),
+                        station.style(),
+                        station.description(),
+                        source.map_or("", Service::name),
+                        source.map_or("", Service::badge),
+                    ],
+                    &normalized_query,
+                    &tokens,
+                )
+                .map(|rank| (rank, SearchResult::Station(station)))
+            })
+            .collect::<Vec<_>>();
+        let mut playlists = self
+            .playlists
+            .iter()
+            .filter_map(|playlist| {
+                let source = self.service(playlist.source_id());
+                search_rank(
+                    playlist.name(),
+                    &[
+                        playlist.name(),
+                        playlist.description(),
+                        source.map_or("", Service::name),
+                        source.map_or("", Service::badge),
+                    ],
+                    &normalized_query,
+                    &tokens,
+                )
+                .map(|rank| (rank, SearchResult::Playlist(playlist)))
+            })
+            .collect::<Vec<_>>();
+        let mut tracks = self
+            .tracks
+            .iter()
+            .filter_map(|track| {
+                let source = self.service(track.source_id());
+                search_rank(
+                    track.name(),
+                    &[
+                        track.name(),
+                        track.creator(),
+                        source.map_or("", Service::name),
+                        source.map_or("", Service::badge),
+                    ],
+                    &normalized_query,
+                    &tokens,
+                )
+                .map(|rank| (rank, SearchResult::Track(track)))
+            })
+            .collect::<Vec<_>>();
+
+        listening_intents.sort_by_key(|(rank, _)| *rank);
+        stations.sort_by_key(|(rank, _)| *rank);
+        playlists.sort_by_key(|(rank, _)| *rank);
+        tracks.sort_by_key(|(rank, _)| *rank);
+
+        let items = listening_intents
+            .into_iter()
+            .chain(stations)
+            .chain(playlists)
+            .chain(tracks)
+            .map(|(_, result)| result)
+            .collect();
+        SearchResults { items }
+    }
+
     pub(crate) fn source_badge(&self, source_id: &CatalogId) -> &str {
         self.service(source_id).map_or("UNKNOWN", Service::badge)
     }
@@ -956,4 +1106,31 @@ impl DemoCatalog {
         self.service(source_id)
             .map_or("Unknown Source", Service::name)
     }
+}
+
+fn search_rank(
+    title: &str,
+    searchable_fields: &[&str],
+    normalized_query: &str,
+    tokens: &[&str],
+) -> Option<u8> {
+    let normalized_fields = searchable_fields
+        .iter()
+        .map(|field| field.to_lowercase())
+        .collect::<Vec<_>>();
+    if !tokens
+        .iter()
+        .all(|token| normalized_fields.iter().any(|field| field.contains(token)))
+    {
+        return None;
+    }
+
+    let normalized_title = title.to_lowercase();
+    Some(if normalized_title == normalized_query {
+        0
+    } else if normalized_title.starts_with(normalized_query) {
+        1
+    } else {
+        2
+    })
 }

@@ -88,6 +88,7 @@ fn translate_key(key: KeyEvent) -> Option<Key> {
         (KeyCode::Up, _) => Some(Key::Up),
         (KeyCode::Down, _) => Some(Key::Down),
         (KeyCode::Enter, _) => Some(Key::Enter),
+        (KeyCode::Backspace, _) => Some(Key::Backspace),
         (KeyCode::Esc, _) => Some(Key::Escape),
         (KeyCode::Char(character), modifiers)
             if !modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>

@@ -12,8 +12,8 @@ My playlists, and both fictional Service catalogs, with read-only details from
 a deterministic Demo catalog. Tracks, Playlists, and Stations can start silent
 simulated Playback sessions with persistent Now Playing state. Tracks and
 Playlists can be appended to a scrollable Queue where upcoming Tracks can be
-inspected, removed, or played. Search everything remains an explicit
-placeholder Destination.
+inspected, removed, or played. Search everything provides incremental,
+Source-aware results across the complete Demo catalog.
 
 ## Build and run
 
@@ -50,6 +50,9 @@ complete command-line surface.
 - `n` opens expanded Now Playing and its scrollable Queue.
 - `d` removes the selected queued Track.
 - `Space` pauses or resumes playback and restarts a retained stopped Track.
+- `/` opens Search or restores focus to its query.
+- Printable input edits a focused Search query; `Backspace` erases and `Esc`
+  returns to result navigation.
 - `Esc` restores the previous Destination's exact selection and scroll position.
 - `?` opens contextual help.
 - `q` or `Ctrl+C` quits.
@@ -75,5 +78,5 @@ cargo test --locked
 Pre-alpha. Home, the durable Application Module/terminal adapter foundation,
 the fixed Demo catalog, Mood & activity, Radio stations, My playlists,
 both fictional Service catalogs, deterministic simulated Playback sessions, and
-interactive Queue management are implemented. Search, networking, and
-persistence are not yet implemented.
+interactive Queue management, and Source-aware grouped Search are implemented.
+Networking and persistence are not yet implemented.
