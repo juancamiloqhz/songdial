@@ -103,7 +103,7 @@ fn station_loads_as_live_and_persists_while_browsing() {
         (
             " NOW PLAYING  Loading Night Ledger [MORROW]",
             "              Waiting for simulated playback.",
-            " ↑/k up  ↓/j down  Enter inspect  p play",
+            " ↑/k ↓/j move  Enter inspect",
         )
     );
 
