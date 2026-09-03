@@ -8,10 +8,7 @@ use ratatui::{
 
 use crate::{
     Availability, CatalogId, DemoCatalog,
-    catalog::{
-        IntentMatch, Playlist, ServiceCatalogCounts, ServiceCatalogItem, ServiceCatalogItemKind,
-        Station, Track,
-    },
+    catalog::{IntentMatch, Playlist, ServiceCatalogItem, Station, Track},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -73,6 +70,32 @@ struct DenseCatalogRow<'a> {
     detail: &'a str,
     availability: &'a Availability,
     status: &'static str,
+}
+
+type QueueAddition = Result<(Vec<CatalogId>, String), String>;
+
+struct ServiceCatalogItemProjection<'a> {
+    details_destination: Destination,
+    playback_start: PlaybackStartOutcome,
+    queue_addition: QueueAddition,
+    queue_is_applicable: bool,
+    playing: bool,
+    kind: &'static str,
+    title: &'a str,
+    source_id: &'a CatalogId,
+    detail: String,
+    availability: &'a Availability,
+    status: &'static str,
+}
+
+impl ServiceCatalogItemProjection<'_> {
+    fn can_play(&self) -> bool {
+        matches!(self.playback_start, PlaybackStartOutcome::Ready(_))
+    }
+
+    fn can_queue(&self) -> bool {
+        self.queue_addition.is_ok()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -441,33 +464,22 @@ impl Application {
     }
 
     fn add_selected_to_queue(&mut self) {
-        let (track_ids, confirmation) = match &self.current.destination {
+        let addition = match &self.current.destination {
             Destination::PlaylistDetails { playlist_id, .. } => {
                 let Some(playlist) = self.catalog.playlist(playlist_id) else {
                     return;
                 };
                 if playlist.track_ids().is_empty() {
-                    self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
-                        "Cannot add: {} has no playable Tracks.",
-                        playlist.name()
-                    )));
-                    return;
-                }
-                let Some(track) = playlist
-                    .track_ids()
-                    .get(self.current.selection)
-                    .and_then(|track_id| self.catalog.track(track_id))
-                else {
-                    return;
-                };
-                match Self::track_queue_addition(track) {
-                    Ok(addition) => addition,
-                    Err(reason) => {
-                        self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
-                            "Cannot add: {reason}"
-                        )));
+                    self.playlist_queue_addition(playlist)
+                } else {
+                    let Some(track) = playlist
+                        .track_ids()
+                        .get(self.current.selection)
+                        .and_then(|track_id| self.catalog.track(track_id))
+                    else {
                         return;
-                    }
+                    };
+                    Self::track_queue_addition(track)
                 }
             }
             Destination::ListeningIntent(intent_id) => {
@@ -475,62 +487,26 @@ impl Application {
                 let Some(intent_match) = intent_matches.get(self.current.selection) else {
                     return;
                 };
-                let IntentMatch::Playlist(playlist) = intent_match else {
-                    self.playback_feedback = Some(PlaybackFeedback::Persistent(
-                        "Cannot add: Stations are continuous and cannot be queued.".to_owned(),
-                    ));
-                    return;
-                };
-                match self.playlist_queue_addition(playlist) {
-                    Ok(addition) => addition,
-                    Err(reason) => {
-                        self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
-                            "Cannot add: {reason}"
-                        )));
-                        return;
+                match intent_match {
+                    IntentMatch::Station(_) => {
+                        Err("Stations are continuous and cannot be queued.".to_owned())
                     }
+                    IntentMatch::Playlist(playlist) => self.playlist_queue_addition(playlist),
                 }
             }
             Destination::Playlists => {
                 let Some(playlist) = self.catalog.playlists().get(self.current.selection) else {
                     return;
                 };
-                match self.playlist_queue_addition(playlist) {
-                    Ok(addition) => addition,
-                    Err(reason) => {
-                        self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
-                            "Cannot add: {reason}"
-                        )));
-                        return;
-                    }
-                }
+                self.playlist_queue_addition(playlist)
             }
             Destination::ServiceCatalog(service_id) => {
                 let items = self.catalog.service_catalog_items(service_id);
                 let Some(item) = items.get(self.current.selection) else {
                     return;
                 };
-                let addition = match item {
-                    ServiceCatalogItem::Station(_) => {
-                        self.playback_feedback = Some(PlaybackFeedback::Persistent(
-                            "Cannot add: Stations are continuous and cannot be queued.".to_owned(),
-                        ));
-                        return;
-                    }
-                    ServiceCatalogItem::Playlist(playlist) => {
-                        self.playlist_queue_addition(playlist)
-                    }
-                    ServiceCatalogItem::Track(track) => Self::track_queue_addition(track),
-                };
-                match addition {
-                    Ok(addition) => addition,
-                    Err(reason) => {
-                        self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
-                            "Cannot add: {reason}"
-                        )));
-                        return;
-                    }
-                }
+                self.service_catalog_item_projection(service_id, *item)
+                    .queue_addition
             }
             Destination::TrackDetails {
                 origin: TrackDetailsOrigin::ServiceCatalog(_),
@@ -539,15 +515,7 @@ impl Application {
                 let Some(track) = self.catalog.track(track_id) else {
                     return;
                 };
-                match Self::track_queue_addition(track) {
-                    Ok(addition) => addition,
-                    Err(reason) => {
-                        self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
-                            "Cannot add: {reason}"
-                        )));
-                        return;
-                    }
-                }
+                Self::track_queue_addition(track)
             }
             Destination::Home
             | Destination::ListeningIntents
@@ -559,9 +527,15 @@ impl Application {
             | Destination::NotYetAvailable(_) => return,
             Destination::Services => return,
             Destination::Stations | Destination::StationDetails { .. } => {
-                self.playback_feedback = Some(PlaybackFeedback::Persistent(
-                    "Cannot add: Stations are continuous and cannot be queued.".to_owned(),
-                ));
+                Err("Stations are continuous and cannot be queued.".to_owned())
+            }
+        };
+        let (track_ids, confirmation) = match addition {
+            Ok(addition) => addition,
+            Err(reason) => {
+                self.playback_feedback = Some(PlaybackFeedback::Persistent(format!(
+                    "Cannot add: {reason}"
+                )));
                 return;
             }
         };
@@ -626,6 +600,87 @@ impl Application {
             )),
             Availability::Loading => Err(format!("{} is still loading.", track.name())),
             Availability::Unavailable(reason) => Err(reason.clone()),
+        }
+    }
+
+    fn service_catalog_item_projection<'a>(
+        &self,
+        service_id: &CatalogId,
+        item: ServiceCatalogItem<'a>,
+    ) -> ServiceCatalogItemProjection<'a> {
+        match item {
+            ServiceCatalogItem::Station(station) => ServiceCatalogItemProjection {
+                details_destination: Destination::StationDetails {
+                    origin: StationDetailsOrigin::ServiceCatalog(service_id.clone()),
+                    station_id: station.id().clone(),
+                },
+                playback_start: Self::station_playback_start(station),
+                queue_addition: Err("Stations are continuous and cannot be queued.".to_owned()),
+                queue_is_applicable: false,
+                playing: matches!(
+                    &self.playback,
+                    Some(PlaybackSession::Station { station_id, .. })
+                        if station_id == station.id()
+                ),
+                kind: "STATION",
+                title: station.name(),
+                source_id: station.source_id(),
+                detail: station.style().to_owned(),
+                availability: station.availability(),
+                status: Self::availability_label(station.availability()),
+            },
+            ServiceCatalogItem::Playlist(playlist) => {
+                let track_count = playlist.track_ids().len();
+                let suffix = if track_count == 1 { "" } else { "s" };
+                ServiceCatalogItemProjection {
+                    details_destination: Destination::PlaylistDetails {
+                        origin: PlaylistDetailsOrigin::ServiceCatalog(service_id.clone()),
+                        playlist_id: playlist.id().clone(),
+                    },
+                    playback_start: self.playlist_playback_start(playlist),
+                    queue_addition: self.playlist_queue_addition(playlist),
+                    queue_is_applicable: true,
+                    playing: matches!(
+                        &self.playback,
+                        Some(PlaybackSession::Track {
+                            origin_playlist_id: Some(playlist_id),
+                            ..
+                        }) if playlist_id == playlist.id()
+                    ),
+                    kind: "PLAYLIST",
+                    title: playlist.name(),
+                    source_id: playlist.source_id(),
+                    detail: format!("{track_count} Track{suffix}"),
+                    availability: playlist.availability(),
+                    status: if track_count == 0 {
+                        "EMPTY"
+                    } else {
+                        Self::availability_label(playlist.availability())
+                    },
+                }
+            }
+            ServiceCatalogItem::Track(track) => ServiceCatalogItemProjection {
+                details_destination: Destination::TrackDetails {
+                    origin: TrackDetailsOrigin::ServiceCatalog(service_id.clone()),
+                    track_id: track.id().clone(),
+                },
+                playback_start: Self::track_playback_start(track),
+                queue_addition: Self::track_queue_addition(track),
+                queue_is_applicable: true,
+                playing: matches!(
+                    &self.playback,
+                    Some(PlaybackSession::Track {
+                        current_track_id,
+                        ..
+                    }) if current_track_id == track.id()
+                ),
+                kind: "TRACK",
+                title: track.name(),
+                source_id: track.source_id(),
+                detail: track.creator().to_owned(),
+                availability: track.availability(),
+                status: Self::availability_label(track.availability()),
+            },
         }
     }
 
@@ -773,18 +828,10 @@ impl Application {
                 .catalog
                 .service_catalog_items(service_id)
                 .get(self.current.selection)
-                .map_or(
-                    PlaybackStartOutcome::NoPlayableSelected,
-                    |item| match item {
-                        ServiceCatalogItem::Station(station) => {
-                            Self::station_playback_start(station)
-                        }
-                        ServiceCatalogItem::Playlist(playlist) => {
-                            self.playlist_playback_start(playlist)
-                        }
-                        ServiceCatalogItem::Track(track) => Self::track_playback_start(track),
-                    },
-                ),
+                .map_or(PlaybackStartOutcome::NoPlayableSelected, |item| {
+                    self.service_catalog_item_projection(service_id, *item)
+                        .playback_start
+                }),
             Destination::StationDetails { station_id, .. } => self
                 .catalog
                 .station(station_id)
@@ -1053,21 +1100,11 @@ impl Application {
             }
             Destination::ServiceCatalog(service_id) => {
                 let items = self.catalog.service_catalog_items(&service_id);
-                match items.get(self.current.selection) {
-                    Some(ServiceCatalogItem::Station(station)) => Destination::StationDetails {
-                        origin: StationDetailsOrigin::ServiceCatalog(service_id),
-                        station_id: station.id().clone(),
-                    },
-                    Some(ServiceCatalogItem::Playlist(playlist)) => Destination::PlaylistDetails {
-                        origin: PlaylistDetailsOrigin::ServiceCatalog(service_id),
-                        playlist_id: playlist.id().clone(),
-                    },
-                    Some(ServiceCatalogItem::Track(track)) => Destination::TrackDetails {
-                        origin: TrackDetailsOrigin::ServiceCatalog(service_id),
-                        track_id: track.id().clone(),
-                    },
-                    None => return,
-                }
+                let Some(item) = items.get(self.current.selection) else {
+                    return;
+                };
+                self.service_catalog_item_projection(&service_id, *item)
+                    .details_destination
             }
             Destination::NowPlaying => {
                 let Some(PlaybackSession::Track { queue, .. }) = &self.playback else {
@@ -1556,8 +1593,7 @@ impl Application {
             let selected = index == self.current.selection;
             let state = Self::dense_row_state(selected, false, &Availability::Available);
             let source = format!("[{}]", service.badge());
-            let items = self.catalog.service_catalog_items(service.id());
-            let counts = ServiceCatalogCounts::from_items(&items);
+            let counts = self.catalog.service_catalog_counts(service.id());
             let row = 6 + index as u16 * 2;
             buffer.set_string(
                 0,
@@ -1597,7 +1633,7 @@ impl Application {
             .service(service_id)
             .expect("Service catalog should reference a Demo Service");
         let items = self.catalog.service_catalog_items(service_id);
-        let counts = ServiceCatalogCounts::from_items(&items);
+        let counts = self.catalog.service_catalog_counts(service_id);
         buffer.set_string(
             0,
             0,
@@ -1637,39 +1673,35 @@ impl Application {
             let index = self.current.scroll_offset + slot;
             let selected = index == self.current.selection;
             let row = 6 + slot as u16 * 2;
-            let item = *item;
-            let detail = item.detail();
-            let status = if item.kind() == ServiceCatalogItemKind::Playlist && !item.can_play() {
-                "EMPTY"
-            } else {
-                Self::availability_label(item.availability())
-            };
+            let projection = self.service_catalog_item_projection(service_id, *item);
             self.render_dense_catalog_row(
                 buffer,
                 base,
                 DenseCatalogRow {
                     row,
                     selected,
-                    playing: self.service_catalog_item_is_playing(item),
-                    kind: item.kind().label(),
-                    title: item.title(),
-                    source_id: item.source_id(),
-                    detail: &detail,
-                    availability: item.availability(),
-                    status,
+                    playing: projection.playing,
+                    kind: projection.kind,
+                    title: projection.title,
+                    source_id: projection.source_id,
+                    detail: &projection.detail,
+                    availability: projection.availability,
+                    status: projection.status,
                 },
             );
         }
 
         self.render_now_playing(buffer, base);
         buffer.set_string(0, self.guide_top(), " ↑/k ↓/j move  Enter inspect", base);
-        let actions = match items.get(self.current.selection).copied() {
-            Some(item) if item.kind() == ServiceCatalogItemKind::Station && item.can_play() => {
+        let actions = match items
+            .get(self.current.selection)
+            .copied()
+            .map(|item| self.service_catalog_item_projection(service_id, item))
+        {
+            Some(item) if !item.queue_is_applicable && item.can_play() => {
                 " p play  n queue  Esc back"
             }
-            Some(item) if item.kind() == ServiceCatalogItemKind::Station => {
-                " p unavailable  n queue  Esc back"
-            }
+            Some(item) if !item.queue_is_applicable => " p unavailable  n queue  Esc back",
             Some(item) if item.can_play() && item.can_queue() => " p play  a add  Esc back",
             Some(_) => " p unavailable  a unavailable  Esc back",
             None => " Esc back  ? help  q quit",
@@ -2362,29 +2394,6 @@ impl Application {
             "BROWSE SERVICES / {}",
             self.catalog.source_name(service_id).to_uppercase()
         )
-    }
-
-    fn service_catalog_item_is_playing(&self, item: ServiceCatalogItem<'_>) -> bool {
-        match item {
-            ServiceCatalogItem::Station(station) => matches!(
-                &self.playback,
-                Some(PlaybackSession::Station { station_id, .. }) if station_id == station.id()
-            ),
-            ServiceCatalogItem::Playlist(playlist) => matches!(
-                &self.playback,
-                Some(PlaybackSession::Track {
-                    origin_playlist_id: Some(playlist_id),
-                    ..
-                }) if playlist_id == playlist.id()
-            ),
-            ServiceCatalogItem::Track(track) => matches!(
-                &self.playback,
-                Some(PlaybackSession::Track {
-                    current_track_id,
-                    ..
-                }) if current_track_id == track.id()
-            ),
-        }
     }
 
     const fn dense_row_state(

@@ -410,100 +410,10 @@ pub(crate) enum ServiceCatalogItem<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ServiceCatalogItemKind {
-    Station,
-    Playlist,
-    Track,
-}
-
-impl ServiceCatalogItemKind {
-    pub(crate) const fn label(self) -> &'static str {
-        match self {
-            Self::Station => "STATION",
-            Self::Playlist => "PLAYLIST",
-            Self::Track => "TRACK",
-        }
-    }
-}
-
-impl<'a> ServiceCatalogItem<'a> {
-    pub(crate) const fn kind(self) -> ServiceCatalogItemKind {
-        match self {
-            Self::Station(_) => ServiceCatalogItemKind::Station,
-            Self::Playlist(_) => ServiceCatalogItemKind::Playlist,
-            Self::Track(_) => ServiceCatalogItemKind::Track,
-        }
-    }
-
-    pub(crate) fn title(self) -> &'a str {
-        match self {
-            Self::Station(station) => station.name(),
-            Self::Playlist(playlist) => playlist.name(),
-            Self::Track(track) => track.name(),
-        }
-    }
-
-    pub(crate) const fn source_id(self) -> &'a CatalogId {
-        match self {
-            Self::Station(station) => station.source_id(),
-            Self::Playlist(playlist) => playlist.source_id(),
-            Self::Track(track) => track.source_id(),
-        }
-    }
-
-    pub(crate) const fn availability(self) -> &'a Availability {
-        match self {
-            Self::Station(station) => station.availability(),
-            Self::Playlist(playlist) => playlist.availability(),
-            Self::Track(track) => track.availability(),
-        }
-    }
-
-    pub(crate) fn detail(self) -> String {
-        match self {
-            Self::Station(station) => station.style().to_owned(),
-            Self::Playlist(playlist) => {
-                let track_count = playlist.track_ids().len();
-                let suffix = if track_count == 1 { "" } else { "s" };
-                format!("{track_count} Track{suffix}")
-            }
-            Self::Track(track) => track.creator().to_owned(),
-        }
-    }
-
-    pub(crate) fn can_play(self) -> bool {
-        !matches!(self.availability(), Availability::Unavailable(_))
-            && !matches!(self, Self::Playlist(playlist) if playlist.track_ids().is_empty())
-    }
-
-    pub(crate) fn can_queue(self) -> bool {
-        !matches!(self, Self::Station(_)) && self.can_play()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ServiceCatalogCounts {
     pub(crate) stations: usize,
     pub(crate) playlists: usize,
     pub(crate) tracks: usize,
-}
-
-impl ServiceCatalogCounts {
-    pub(crate) fn from_items(items: &[ServiceCatalogItem<'_>]) -> Self {
-        let mut counts = Self {
-            stations: 0,
-            playlists: 0,
-            tracks: 0,
-        };
-        for item in items {
-            match item.kind() {
-                ServiceCatalogItemKind::Station => counts.stations += 1,
-                ServiceCatalogItemKind::Playlist => counts.playlists += 1,
-                ServiceCatalogItemKind::Track => counts.tracks += 1,
-            }
-        }
-        counts
-    }
 }
 
 /// Catalog data for the first Songdial milestone.
@@ -1020,6 +930,26 @@ impl DemoCatalog {
             .map(ServiceCatalogItem::Track);
 
         stations.chain(playlists).chain(tracks).collect()
+    }
+
+    pub(crate) fn service_catalog_counts(&self, service_id: &CatalogId) -> ServiceCatalogCounts {
+        ServiceCatalogCounts {
+            stations: self
+                .stations
+                .iter()
+                .filter(|station| station.source_id() == service_id)
+                .count(),
+            playlists: self
+                .playlists
+                .iter()
+                .filter(|playlist| playlist.source_id() == service_id)
+                .count(),
+            tracks: self
+                .tracks
+                .iter()
+                .filter(|track| track.source_id() == service_id)
+                .count(),
+        }
     }
 
     pub(crate) fn source_badge(&self, source_id: &CatalogId) -> &str {

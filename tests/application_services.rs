@@ -224,7 +224,7 @@ fn service_catalog_playable_items_reuse_playback_and_keep_duplicate_tracks_sourc
 }
 
 #[test]
-fn service_catalog_reuses_queue_feedback_for_every_content_type() {
+fn service_catalog_reuses_queue_feedback_for_every_playable_item_type() {
     let mut application = Application::new(Viewport::new(80, 24));
     open_browse_services(&mut application);
     application.handle_event(Event::Key(Key::Enter));
