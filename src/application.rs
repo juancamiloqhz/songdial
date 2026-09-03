@@ -501,8 +501,8 @@ impl Application {
                 self.playlist_queue_addition(playlist)
             }
             Destination::ServiceCatalog(service_id) => {
-                let items = self.catalog.service_catalog_items(service_id);
-                let Some(item) = items.get(self.current.selection) else {
+                let service_catalog = self.catalog.service_catalog(service_id);
+                let Some(item) = service_catalog.items.get(self.current.selection) else {
                     return;
                 };
                 self.service_catalog_item_projection(service_id, *item)
@@ -824,14 +824,16 @@ impl Application {
                 .map_or(PlaybackStartOutcome::NoPlayableSelected, |playlist| {
                     self.playlist_playback_start(playlist)
                 }),
-            Destination::ServiceCatalog(service_id) => self
-                .catalog
-                .service_catalog_items(service_id)
-                .get(self.current.selection)
-                .map_or(PlaybackStartOutcome::NoPlayableSelected, |item| {
-                    self.service_catalog_item_projection(service_id, *item)
-                        .playback_start
-                }),
+            Destination::ServiceCatalog(service_id) => {
+                let service_catalog = self.catalog.service_catalog(service_id);
+                service_catalog.items.get(self.current.selection).map_or(
+                    PlaybackStartOutcome::NoPlayableSelected,
+                    |item| {
+                        self.service_catalog_item_projection(service_id, *item)
+                            .playback_start
+                    },
+                )
+            }
             Destination::StationDetails { station_id, .. } => self
                 .catalog
                 .station(station_id)
@@ -1022,7 +1024,7 @@ impl Application {
             Destination::Playlists => self.catalog.playlists().len(),
             Destination::Services => self.catalog.services().len(),
             Destination::ServiceCatalog(service_id) => {
-                self.catalog.service_catalog_items(service_id).len()
+                self.catalog.service_catalog(service_id).items.len()
             }
             Destination::ListeningIntent(intent_id) => self.catalog.intent_matches(intent_id).len(),
             Destination::PlaylistDetails { playlist_id, .. } => self
@@ -1099,8 +1101,8 @@ impl Application {
                 Destination::ServiceCatalog(service.id().clone())
             }
             Destination::ServiceCatalog(service_id) => {
-                let items = self.catalog.service_catalog_items(&service_id);
-                let Some(item) = items.get(self.current.selection) else {
+                let service_catalog = self.catalog.service_catalog(&service_id);
+                let Some(item) = service_catalog.items.get(self.current.selection) else {
                     return;
                 };
                 self.service_catalog_item_projection(&service_id, *item)
@@ -1593,7 +1595,7 @@ impl Application {
             let selected = index == self.current.selection;
             let state = Self::dense_row_state(selected, false, &Availability::Available);
             let source = format!("[{}]", service.badge());
-            let counts = self.catalog.service_catalog_counts(service.id());
+            let counts = self.catalog.service_catalog(service.id()).counts;
             let row = 6 + index as u16 * 2;
             buffer.set_string(
                 0,
@@ -1632,8 +1634,9 @@ impl Application {
             .catalog
             .service(service_id)
             .expect("Service catalog should reference a Demo Service");
-        let items = self.catalog.service_catalog_items(service_id);
-        let counts = self.catalog.service_catalog_counts(service_id);
+        let service_catalog = self.catalog.service_catalog(service_id);
+        let items = service_catalog.items;
+        let counts = service_catalog.counts;
         buffer.set_string(
             0,
             0,

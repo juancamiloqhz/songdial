@@ -416,6 +416,12 @@ pub(crate) struct ServiceCatalogCounts {
     pub(crate) tracks: usize,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ServiceCatalogView<'a> {
+    pub(crate) items: Vec<ServiceCatalogItem<'a>>,
+    pub(crate) counts: ServiceCatalogCounts,
+}
+
 /// Catalog data for the first Songdial milestone.
 ///
 /// [`Self::fixed`] returns the deterministic fictional fixture, while
@@ -909,47 +915,37 @@ impl DemoCatalog {
             })
     }
 
-    pub(crate) fn service_catalog_items(
-        &self,
-        service_id: &CatalogId,
-    ) -> Vec<ServiceCatalogItem<'_>> {
+    pub(crate) fn service_catalog(&self, service_id: &CatalogId) -> ServiceCatalogView<'_> {
         let stations = self
             .stations
             .iter()
             .filter(|station| station.source_id() == service_id)
-            .map(ServiceCatalogItem::Station);
+            .map(ServiceCatalogItem::Station)
+            .collect::<Vec<_>>();
         let playlists = self
             .playlists
             .iter()
             .filter(|playlist| playlist.source_id() == service_id)
-            .map(ServiceCatalogItem::Playlist);
+            .map(ServiceCatalogItem::Playlist)
+            .collect::<Vec<_>>();
         let tracks = self
             .tracks
             .iter()
             .filter(|track| track.source_id() == service_id)
-            .map(ServiceCatalogItem::Track);
+            .map(ServiceCatalogItem::Track)
+            .collect::<Vec<_>>();
+        let counts = ServiceCatalogCounts {
+            stations: stations.len(),
+            playlists: playlists.len(),
+            tracks: tracks.len(),
+        };
+        let items = stations
+            .into_iter()
+            .chain(playlists)
+            .chain(tracks)
+            .collect();
 
-        stations.chain(playlists).chain(tracks).collect()
-    }
-
-    pub(crate) fn service_catalog_counts(&self, service_id: &CatalogId) -> ServiceCatalogCounts {
-        ServiceCatalogCounts {
-            stations: self
-                .stations
-                .iter()
-                .filter(|station| station.source_id() == service_id)
-                .count(),
-            playlists: self
-                .playlists
-                .iter()
-                .filter(|playlist| playlist.source_id() == service_id)
-                .count(),
-            tracks: self
-                .tracks
-                .iter()
-                .filter(|track| track.source_id() == service_id)
-                .count(),
-        }
+        ServiceCatalogView { items, counts }
     }
 
     pub(crate) fn source_badge(&self, source_id: &CatalogId) -> &str {
