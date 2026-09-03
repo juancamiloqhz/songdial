@@ -402,6 +402,26 @@ pub(crate) enum IntentMatch<'a> {
     Playlist(&'a Playlist),
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ServiceCatalogItem<'a> {
+    Station(&'a Station),
+    Playlist(&'a Playlist),
+    Track(&'a Track),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ServiceCatalogCounts {
+    pub(crate) stations: usize,
+    pub(crate) playlists: usize,
+    pub(crate) tracks: usize,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ServiceCatalogView<'a> {
+    pub(crate) items: Vec<ServiceCatalogItem<'a>>,
+    pub(crate) counts: ServiceCatalogCounts,
+}
+
 /// Catalog data for the first Songdial milestone.
 ///
 /// [`Self::fixed`] returns the deterministic fictional fixture, while
@@ -893,6 +913,39 @@ impl DemoCatalog {
                     .filter_map(|track_id| self.track(track_id))
                     .collect()
             })
+    }
+
+    pub(crate) fn service_catalog(&self, service_id: &CatalogId) -> ServiceCatalogView<'_> {
+        let stations = self
+            .stations
+            .iter()
+            .filter(|station| station.source_id() == service_id)
+            .map(ServiceCatalogItem::Station)
+            .collect::<Vec<_>>();
+        let playlists = self
+            .playlists
+            .iter()
+            .filter(|playlist| playlist.source_id() == service_id)
+            .map(ServiceCatalogItem::Playlist)
+            .collect::<Vec<_>>();
+        let tracks = self
+            .tracks
+            .iter()
+            .filter(|track| track.source_id() == service_id)
+            .map(ServiceCatalogItem::Track)
+            .collect::<Vec<_>>();
+        let counts = ServiceCatalogCounts {
+            stations: stations.len(),
+            playlists: playlists.len(),
+            tracks: tracks.len(),
+        };
+        let items = stations
+            .into_iter()
+            .chain(playlists)
+            .chain(tracks)
+            .collect();
+
+        ServiceCatalogView { items, counts }
     }
 
     pub(crate) fn source_badge(&self, source_id: &CatalogId) -> &str {
