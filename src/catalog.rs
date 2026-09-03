@@ -402,6 +402,13 @@ pub(crate) enum IntentMatch<'a> {
     Playlist(&'a Playlist),
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ServiceCatalogItem<'a> {
+    Station(&'a Station),
+    Playlist(&'a Playlist),
+    Track(&'a Track),
+}
+
 /// Catalog data for the first Songdial milestone.
 ///
 /// [`Self::fixed`] returns the deterministic fictional fixture, while
@@ -893,6 +900,29 @@ impl DemoCatalog {
                     .filter_map(|track_id| self.track(track_id))
                     .collect()
             })
+    }
+
+    pub(crate) fn service_catalog_items(
+        &self,
+        service_id: &CatalogId,
+    ) -> Vec<ServiceCatalogItem<'_>> {
+        let stations = self
+            .stations
+            .iter()
+            .filter(|station| station.source_id() == service_id)
+            .map(ServiceCatalogItem::Station);
+        let playlists = self
+            .playlists
+            .iter()
+            .filter(|playlist| playlist.source_id() == service_id)
+            .map(ServiceCatalogItem::Playlist);
+        let tracks = self
+            .tracks
+            .iter()
+            .filter(|track| track.source_id() == service_id)
+            .map(ServiceCatalogItem::Track);
+
+        stations.chain(playlists).chain(tracks).collect()
     }
 
     pub(crate) fn source_badge(&self, source_id: &CatalogId) -> &str {

@@ -117,7 +117,11 @@ fn enter_opens_every_home_choice_without_starting_playback() {
                     "  5 Playlists • Playlist 1/5".to_owned(),
                     " ↑/k ↓/j move  Enter inspect".to_owned(),
                 ),
-                3 | 4 => (
+                3 => (
+                    "  2 Services • Service 1/2".to_owned(),
+                    " ↑/k ↓/j move  Enter open".to_owned(),
+                ),
+                4 => (
                     "  This Destination is not yet available.".to_owned(),
                     " n queue  Esc back  ? help  q quit".to_owned(),
                 ),
