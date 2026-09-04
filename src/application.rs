@@ -1937,7 +1937,7 @@ impl Application {
         let selected = self.selected_style();
         if self.current.active_pane == ActivePane::List {
             buffer.set_style(
-                Rect::new(2, 4 + self.current.selection as u16, 76, 1),
+                self.dense_list_selection_area(4 + self.current.selection as u16, 1),
                 selected,
             );
         }
@@ -1981,7 +1981,7 @@ impl Application {
             && self.current.active_pane == ActivePane::List
         {
             buffer.set_style(
-                Rect::new(2, 5 + self.current.selection as u16, 76, 1),
+                self.dense_list_selection_area(5 + self.current.selection as u16, 1),
                 selected,
             );
         }

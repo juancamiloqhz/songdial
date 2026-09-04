@@ -752,6 +752,42 @@ fn no_color_keeps_selection_and_state_text_without_explicit_color_cells() {
 }
 
 #[test]
+fn no_color_wide_selection_stops_before_the_detail_lens() {
+    let home = Application::with_options(
+        Viewport::new(120, 40),
+        ApplicationOptions::new(false, false),
+    );
+    let mut intents = Application::with_options(
+        Viewport::new(120, 40),
+        ApplicationOptions::new(false, false),
+    );
+    intents.handle_event(Event::Key(Key::Enter));
+
+    for (destination, application, selected_row) in
+        [("Home", home, 4), ("Mood & activity", intents, 5)]
+    {
+        let buffer = application.render();
+
+        for column in 2..58 {
+            assert!(
+                buffer[(column, selected_row)]
+                    .modifier
+                    .contains(Modifier::REVERSED),
+                "{destination} selection ended before column {column}"
+            );
+        }
+        for column in 58..120 {
+            assert!(
+                !buffer[(column, selected_row)]
+                    .modifier
+                    .contains(Modifier::REVERSED),
+                "{destination} selection leaked into the detail lens at column {column}"
+            );
+        }
+    }
+}
+
+#[test]
 fn no_motion_freezes_loading_treatment_without_disabling_loading_feedback() {
     fn start_loading(options: ApplicationOptions) -> Application {
         let mut application = Application::with_options(Viewport::new(80, 24), options);
