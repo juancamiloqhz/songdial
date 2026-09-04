@@ -370,6 +370,10 @@ fn packaged_binary_completes_a_meaningful_smoke_journey_and_restores_the_termina
 
     let stage = session.output_stage();
     session.send(b"\x1b");
+    // Confirm Esc was consumed before another key can be parsed with it as an Alt chord.
+    session.wait_for_screen_state(stage, "Stillwater");
+
+    let stage = session.output_stage();
     session.resize(81, 24);
     assert_queue_state(&mut session, stage);
 
