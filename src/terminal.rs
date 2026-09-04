@@ -27,7 +27,16 @@ pub fn run(no_motion: bool) -> io::Result<()> {
     let mut pending_playback_load = None;
 
     loop {
-        terminal.draw(|frame| frame.buffer_mut().merge(&application.render()))?;
+        terminal.draw(|frame| {
+            let area = frame.area();
+            application.handle_event(Event::Resize(Viewport::new(area.width, area.height)));
+            frame.buffer_mut().merge(&application.render());
+        })?;
+
+        #[cfg(debug_assertions)]
+        if env::var_os("SONGDIAL_TEST_FAIL_RUNTIME_AFTER_DRAW").is_some() {
+            return Err(io::Error::other("injected runtime failure after draw"));
+        }
 
         let wait = next_tick.saturating_duration_since(Instant::now());
         if event::poll(wait)? {
@@ -115,6 +124,11 @@ impl TerminalSession {
 
         enable_raw_mode()?;
         session.raw_mode = true;
+
+        #[cfg(debug_assertions)]
+        if env::var_os("SONGDIAL_TEST_FAIL_STARTUP_AFTER_RAW_MODE").is_some() {
+            return Err(io::Error::other("injected startup failure after raw mode"));
+        }
 
         session.alternate_screen = true;
         execute!(stdout(), EnterAlternateScreen)?;

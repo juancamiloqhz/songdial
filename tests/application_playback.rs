@@ -224,6 +224,11 @@ fn playlist_advances_then_retains_and_restarts_its_final_stopped_track() {
 
     application.handle_event(Event::Tick);
     assert!(lines(&application.render())[20].contains("STOPPED • 00:01/00:01"));
+    assert_eq!(
+        application.handle_event(Event::Key(Key::Char('q'))),
+        Effect::Quit,
+        "a retained stopped Track with an empty Queue is not an active session"
+    );
 
     application.handle_event(Event::Key(Key::Char(' ')));
     assert!(lines(&application.render())[20].contains("PLAYING • 00:00/00:01"));
@@ -483,4 +488,46 @@ fn playlist_rows_retain_the_playback_origin_state_in_text() {
     let independent = lines(&application.render());
     assert!(independent[16].contains("PLAYING *  PLAYLIST  Deep Work Rotation"));
     assert!(independent[18].contains("SELECTED > PLAYLIST  Focus Lines"));
+}
+
+#[test]
+fn active_playback_requires_quit_confirmation_that_can_be_cancelled_or_confirmed() {
+    let mut application = Application::new(Viewport::new(80, 24));
+    application.handle_event(Event::Key(Key::Down));
+    application.handle_event(Event::Key(Key::Enter));
+    let request = expect_load(application.handle_event(Event::Key(Key::Char('p'))));
+    application.handle_event(Event::PlaybackLoaded(request.id()));
+
+    assert_eq!(
+        application.handle_event(Event::Key(Key::Char('q'))),
+        Effect::None
+    );
+    let confirmation = lines(&application.render());
+    assert_eq!(
+        [9, 11, 12].map(|row| confirmation[row].trim_end().to_owned()),
+        [
+            "  QUIT SONGDIAL?",
+            "  A Playback session or Queue is active.",
+            "  q confirm quit  Esc keep listening",
+        ]
+        .map(str::to_owned)
+    );
+
+    assert_eq!(
+        application.handle_event(Event::Key(Key::Escape)),
+        Effect::None
+    );
+    assert_eq!(
+        lines(&application.render())[0].trim_end(),
+        " SONGDIAL / RADIO STATIONS"
+    );
+
+    assert_eq!(
+        application.handle_event(Event::Key(Key::Char('q'))),
+        Effect::None
+    );
+    assert_eq!(
+        application.handle_event(Event::Key(Key::Char('q'))),
+        Effect::Quit
+    );
 }

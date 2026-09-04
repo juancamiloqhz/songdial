@@ -17,7 +17,7 @@ Source-aware results across the complete Demo catalog.
 
 ## Build and run
 
-Install a current stable Rust toolchain, then build Songdial from a clean
+Install the repository-pinned Rust toolchain, then build Songdial from a clean
 checkout with:
 
 ```sh
@@ -55,7 +55,8 @@ complete command-line surface.
   returns to result navigation.
 - `Esc` restores the previous Destination's exact selection and scroll position.
 - `?` opens contextual help.
-- `q` or `Ctrl+C` quits.
+- `q` quits, with confirmation while a Playback session or Queue is active;
+  `Ctrl+C` always exits immediately.
 
 Songdial restores raw mode, cursor visibility, and the alternate screen when it
 exits.
@@ -67,6 +68,10 @@ Run the complete automated suite with:
 ```sh
 cargo test --locked
 ```
+
+Standalone release binaries, target-specific packaging commands, artifact
+verification, and the `80×24` terminal support contract are documented in
+[the release guide](docs/release.md).
 
 ## Product documents
 
