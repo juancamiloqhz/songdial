@@ -1,9 +1,35 @@
 # Explore Songdial Listener validation findings
 
-**Status:** Awaiting three to five completed participant sessions. This file is
-a capture template, not evidence of a usability verdict.
+**Status:** Deferred until Songdial has real music and Station playback. No
+participant sessions have been run, so this file is a capture template rather
+than evidence of a usability verdict.
 
 Protocol: [`usability-study.md`](usability-study.md)
+
+## Deferral decision
+
+On 2026-09-04, the human study was deferred because three to five target
+Listeners were not available. The project will revisit the study after a
+packaged build can play actual music and Stations through a real playback
+integration. Until then, issue #11 and the Explore Songdial milestone remain
+without human-usability validation.
+
+Deferral does not count as a pass, failure, participant session, or product
+finding. Automated acceptance and the packaged-build smoke journey do not
+substitute for observations from target Listeners.
+
+Resume this work by:
+
+1. confirming the protocol still covers the original interaction gates and
+   adding only the setup or listening tasks required by real playback;
+2. recruiting three to five target Listeners who have not read the product
+   documents;
+3. using one verified packaged build for every session;
+4. replacing the pending entries below with anonymized observations;
+5. creating follow-up issues or recording explicit milestone decisions for
+   every material failure;
+6. calculating the gates and assigning a verdict before marking the draft pull
+   request ready for review.
 
 ## Build under study
 
