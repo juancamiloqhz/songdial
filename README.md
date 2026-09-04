@@ -17,7 +17,7 @@ Source-aware results across the complete Demo catalog.
 
 ## Build and run
 
-Install a current stable Rust toolchain, then build Songdial from a clean
+Install the repository-pinned Rust toolchain, then build Songdial from a clean
 checkout with:
 
 ```sh
@@ -67,6 +67,10 @@ Run the complete automated suite with:
 ```sh
 cargo test --locked
 ```
+
+Standalone release binaries, target-specific packaging commands, artifact
+verification, and the `80×24` terminal support contract are documented in
+[the release guide](docs/release.md).
 
 ## Product documents
 
