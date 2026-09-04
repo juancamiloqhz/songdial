@@ -65,6 +65,6 @@ Songdial is fully supported at `80×24` cells and larger. Below that minimum,
 the application replaces the frame with a guard showing the current and
 required dimensions. Resize back to at least `80×24` to recover the unchanged
 Destination, selection, Search query, Playback session, and Queue. While the
-guard is visible, `q` and `Ctrl+C` still quit and restore raw mode, cursor
-visibility, and the alternate screen.
-
+guard is visible, `q` still requests quit (and asks for confirmation when a
+Playback session or Queue is active); `Ctrl+C` exits immediately. Both paths
+restore raw mode, cursor visibility, and the alternate screen.

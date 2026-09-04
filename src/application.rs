@@ -327,6 +327,7 @@ pub struct Application {
     current: DestinationSnapshot,
     history: Vec<DestinationSnapshot>,
     help_visible: bool,
+    quit_confirmation: bool,
     playback: Option<PlaybackSession>,
     pending_playback: Option<PendingPlayback>,
     playback_feedback: Option<PlaybackFeedback>,
@@ -454,6 +455,7 @@ impl Application {
             current: DestinationSnapshot::new(Destination::Home),
             history: Vec::new(),
             help_visible: false,
+            quit_confirmation: false,
             playback: None,
             pending_playback: None,
             playback_feedback: None,
@@ -470,7 +472,13 @@ impl Application {
 
         if !self.viewport.is_supported() {
             return match event {
-                Event::Key(Key::Char('q') | Key::CtrlC) => Effect::Quit,
+                Event::Key(Key::CtrlC) => Effect::Quit,
+                Event::Key(Key::Char('q')) if self.quit_confirmation => Effect::Quit,
+                Event::Key(Key::Char('q')) => self.request_quit(),
+                Event::Key(Key::Escape) if self.quit_confirmation => {
+                    self.quit_confirmation = false;
+                    Effect::None
+                }
                 Event::PlaybackLoaded(request_id) => {
                     self.finish_playback_load(request_id);
                     Effect::None
@@ -516,9 +524,20 @@ impl Application {
             return Effect::Quit;
         }
 
-        if self.help_visible {
+        if self.quit_confirmation {
             return match key {
                 Key::Char('q') => Effect::Quit,
+                Key::Escape => {
+                    self.quit_confirmation = false;
+                    Effect::None
+                }
+                _ => Effect::None,
+            };
+        }
+
+        if self.help_visible {
+            return match key {
+                Key::Char('q') => self.request_quit(),
                 Key::Escape | Key::Char('?') => {
                     self.help_visible = false;
                     Effect::None
@@ -551,7 +570,7 @@ impl Application {
         }
 
         if key == Key::Char('q') {
-            return Effect::Quit;
+            return self.request_quit();
         }
 
         if key == Key::Char('?') {
@@ -574,6 +593,15 @@ impl Application {
         }
 
         Effect::None
+    }
+
+    fn request_quit(&mut self) -> Effect {
+        if self.playback.is_some() {
+            self.quit_confirmation = true;
+            Effect::None
+        } else {
+            Effect::Quit
+        }
     }
 
     fn remove_selected_from_queue(&mut self) {
@@ -1417,6 +1445,9 @@ impl Application {
             self.render_wide_detail_lens(&mut buffer, base);
         }
         self.render_brief_feedback(&mut buffer, base);
+        if self.quit_confirmation {
+            self.render_quit_confirmation(&mut buffer, base);
+        }
 
         buffer
     }
@@ -1840,6 +1871,14 @@ impl Application {
 
     fn render_minimum_size_guard(&self, buffer: &mut Buffer, base: Style) {
         let start_row = self.viewport.height.saturating_sub(7) / 2;
+        let (recovery, quit) = if self.quit_confirmation {
+            (
+                "A Playback session or Queue is active.",
+                "q confirm quit • Esc keep listening",
+            )
+        } else {
+            ("Resize to recover the unchanged session.", "q quit")
+        };
         let lines = [
             (0, "SONGDIAL NEEDS MORE ROOM".to_owned()),
             (
@@ -1850,8 +1889,8 @@ impl Application {
                 ),
             ),
             (3, "Required 80×24 cells".to_owned()),
-            (5, "Resize to recover the unchanged session.".to_owned()),
-            (6, "q quit".to_owned()),
+            (5, recovery.to_owned()),
+            (6, quit.to_owned()),
         ];
 
         for (offset, line) in lines {
@@ -1863,6 +1902,16 @@ impl Application {
             let column = self.viewport.width.saturating_sub(width) / 2;
             buffer.set_string(column, row, line, base);
         }
+    }
+
+    fn render_quit_confirmation(&self, buffer: &mut Buffer, base: Style) {
+        let blank = " ".repeat(usize::from(self.viewport.width));
+        for row in 8..14 {
+            buffer.set_string(0, row, &blank, base);
+        }
+        buffer.set_string(0, 9, "  QUIT SONGDIAL?", base);
+        buffer.set_string(0, 11, "  A Playback session or Queue is active.", base);
+        buffer.set_string(0, 12, "  q confirm quit  Esc keep listening", base);
     }
 
     fn render_brief_feedback(&self, buffer: &mut Buffer, base: Style) {

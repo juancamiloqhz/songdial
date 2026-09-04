@@ -55,7 +55,8 @@ complete command-line surface.
   returns to result navigation.
 - `Esc` restores the previous Destination's exact selection and scroll position.
 - `?` opens contextual help.
-- `q` or `Ctrl+C` quits.
+- `q` quits, with confirmation while a Playback session or Queue is active;
+  `Ctrl+C` always exits immediately.
 
 Songdial restores raw mode, cursor visibility, and the alternate screen when it
 exits.
