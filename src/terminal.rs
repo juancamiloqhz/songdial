@@ -1,4 +1,5 @@
 use std::{
+    env,
     io::{self, stdout},
     time::{Duration, Instant},
 };
@@ -10,16 +11,18 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
-use songdial::{Application, Effect, Event, Key, PlaybackRequestId, Viewport};
+use songdial::{Application, ApplicationOptions, Effect, Event, Key, PlaybackRequestId, Viewport};
 
 const TICK_RATE: Duration = Duration::from_secs(1);
 
-pub fn run(_no_motion: bool) -> io::Result<()> {
+pub fn run(no_motion: bool) -> io::Result<()> {
     let _session = TerminalSession::enter()?;
     let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend)?;
     let size = terminal.size()?;
-    let mut application = Application::new(Viewport::new(size.width, size.height));
+    let options = ApplicationOptions::new(env::var_os("NO_COLOR").is_none(), !no_motion);
+    let mut application =
+        Application::with_options(Viewport::new(size.width, size.height), options);
     let mut next_tick = Instant::now() + TICK_RATE;
     let mut pending_playback_load = None;
 

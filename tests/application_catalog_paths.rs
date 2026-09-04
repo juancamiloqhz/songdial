@@ -37,8 +37,8 @@ fn radio_stations_lists_the_complete_catalog_and_scrolls_without_losing_its_snap
             "  RADIO STATIONS",
             "  Continuous music from every Source.",
             "  8 Stations • Station 1/8",
-            "  SELECTED > STATION   Night Ledger                                     [MORROW]",
-            "  UNAVAIL !  STATION   Northbound Static                                [MORROW]",
+            "  SELECTED > STATION   Night Ledger                         AVAILABLE   [MORROW]",
+            "  UNAVAIL !  STATION   Northbound Static                      UNAVAIL   [MORROW]",
             " ↑/k ↓/j move  Enter inspect",
             " p play  n queue  Esc back",
         ]
@@ -106,7 +106,7 @@ fn unavailable_station_details_remain_inspectable_and_disable_playback_with_the_
     );
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot play: Signal maintenance is in progress."
+        "              ERROR • Cannot play: Signal maintenance is in progress."
     );
 
     application.handle_event(Event::Key(Key::Enter));
@@ -121,7 +121,7 @@ fn unavailable_station_details_remain_inspectable_and_disable_playback_with_the_
             "  Drone",
             "  Source  Morrow Audio",
             "  Long-form tonal broadcasts from the northern line.",
-            "  Status  Unavailable",
+            "  Status  UNAVAIL",
             "  Signal maintenance is in progress.",
             "  Enter opened details only. Nothing started playing.",
             "  Queue  Stations are continuous and cannot be added.",
@@ -136,7 +136,7 @@ fn unavailable_station_details_remain_inspectable_and_disable_playback_with_the_
     );
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot play: Signal maintenance is in progress."
+        "              ERROR • Cannot play: Signal maintenance is in progress."
     );
 
     application.handle_event(Event::Key(Key::Escape));
@@ -188,9 +188,9 @@ fn my_playlists_lists_track_counts_and_sources_and_restores_its_snapshot() {
             "  MY PLAYLISTS",
             "  Personal and saved Playlists from every Source.",
             "  5 Playlists • Playlist 1/5",
-            "  SELECTED > PLAYLIST  Deep Work Rotation                               [MORROW]",
+            "  SELECTED > PLAYLIST  Deep Work Rotation                   AVAILABLE   [MORROW]",
             "             20 Tracks • AVAILABLE",
-            "             PLAYLIST  Empty Room                                       [HARBOR]",
+            "             PLAYLIST  Empty Room                               EMPTY   [HARBOR]",
             "             0 Tracks • EMPTY",
             " ↑/k ↓/j move  Enter inspect",
             " p play  a add  Esc back",
@@ -245,7 +245,7 @@ fn empty_playlist_details_explain_disabled_playback_and_queue_actions() {
             "  Empty Room",
             "  A saved Playlist waiting for its first Track.",
             "  Source  Harbor Sound • 0 Tracks",
-            "  TRACKS • Empty",
+            "  TRACKS • EMPTY",
             "  This Playlist has no Tracks in the Demo catalog.",
             "  Esc returns to My playlists without changing Now Playing.",
             " p unavailable  a unavailable  Esc back",
@@ -260,13 +260,13 @@ fn empty_playlist_details_explain_disabled_playback_and_queue_actions() {
     );
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot play: Empty Room has no Tracks."
+        "              ERROR • Cannot play: Empty Room has no Tracks."
     );
 
     application.handle_event(Event::Key(Key::Char('a')));
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot add: Empty Room has no playable Tracks."
+        "              ERROR • Cannot add: Empty Room has no playable Tracks."
     );
 }
 
@@ -287,7 +287,7 @@ fn non_empty_playlist_details_reuse_track_browsing_and_restore_my_playlists() {
             "  Twenty patient Tracks arranged for a long concentration block.",
             "  Source  Morrow Audio • 20 Tracks",
             "  TRACKS • Track 1/20",
-            "  SELECTED > TRACK   Night Geometry              Sable Circuit          [MORROW]",
+            "  SELECTED > TRACK     Night Geometry                           05:28   [MORROW]",
             " ↑/k ↓/j move  p play",
             " a add  n queue  Esc back",
         ]
@@ -297,7 +297,8 @@ fn non_empty_playlist_details_reuse_track_browsing_and_restore_my_playlists() {
     for _ in 0..30 {
         application.handle_event(Event::Key(Key::Down));
     }
-    assert!(lines(&application.render())[19].contains("SELECTED > TRACK   Cinder Lines"));
+    assert!(lines(&application.render())[19].contains("SELECTED > TRACK"));
+    assert!(lines(&application.render())[19].contains("Cinder Lines"));
 
     application.handle_event(Event::Key(Key::Escape));
     assert_eq!(application.render(), playlists_snapshot);
@@ -359,13 +360,13 @@ fn empty_playlist_in_my_playlists_disables_playback_and_queue_add_with_reasons()
     );
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot play: Empty Room has no Tracks."
+        "              ERROR • Cannot play: Empty Room has no Tracks."
     );
 
     application.handle_event(Event::Key(Key::Char('a')));
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot add: Empty Room has no playable Tracks."
+        "              ERROR • Cannot add: Empty Room has no playable Tracks."
     );
 }
 

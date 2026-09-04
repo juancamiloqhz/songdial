@@ -33,9 +33,9 @@ fn both_fictional_services_open_source_filtered_shared_catalogs() {
             "  BROWSE SERVICES",
             "  Choose a fictional Service catalog by Source.",
             "  2 Services • Service 1/2",
-            "  SELECTED > SERVICE   Morrow Audio                                     [MORROW]",
+            "  SELECTED > SERVICE   Morrow Audio                           CATALOG   [MORROW]",
             "             4 Stations • 2 Playlists • 12 Tracks",
-            "             SERVICE   Harbor Sound                                     [HARBOR]",
+            "             SERVICE   Harbor Sound                           CATALOG   [HARBOR]",
             "             4 Stations • 3 Playlists • 12 Tracks",
             " ↑/k ↓/j move  Enter open",
             " n queue  Esc back  ? help",
@@ -52,10 +52,10 @@ fn both_fictional_services_open_source_filtered_shared_catalogs() {
             "  MORROW AUDIO",
             "  Source-filtered Stations, Playlists, and Tracks.",
             "  4 Stations • 2 Playlists • 12 Tracks • Item 1/18",
-            "  SELECTED > STATION   Night Ledger                                     [MORROW]",
+            "  SELECTED > STATION   Night Ledger                         AVAILABLE   [MORROW]",
             "             Ambient • AVAILABLE",
-            "             TRACK     Night Geometry                                   [MORROW]",
-            "             Sable Circuit • AVAILABLE",
+            "             TRACK     Night Geometry                           05:28   [MORROW]",
+            "             Sable Circuit • 05:28",
         ]
         .map(str::to_owned)
     );
@@ -71,7 +71,7 @@ fn both_fictional_services_open_source_filtered_shared_catalogs() {
             "  HARBOR SOUND",
             "  Source-filtered Stations, Playlists, and Tracks.",
             "  4 Stations • 3 Playlists • 12 Tracks • Item 1/19",
-            "  SELECTED > STATION   Daylight Circuit                                 [HARBOR]",
+            "  SELECTED > STATION   Daylight Circuit                       LOADING   [HARBOR]",
             "             Minimal electronic • LOADING",
         ]
         .map(str::to_owned)
@@ -96,7 +96,7 @@ fn service_playable_item_details_open_without_playback_and_restore_each_catalog_
             "  Ambient",
             "  Source  Morrow Audio",
             "  Unhurried ambient transmissions for sustained attention.",
-            "  Status  Available",
+            "  Status  AVAILABLE",
             "  Enter opened details only. Nothing started playing.",
         ]
         .map(str::to_owned)
@@ -118,7 +118,7 @@ fn service_playable_item_details_open_without_playback_and_restore_each_catalog_
             "  Deep Work Rotation",
             "  Source  Morrow Audio • 20 Tracks",
             "  TRACKS • Track 1/20",
-            "  SELECTED > TRACK   Night Geometry              Sable Circuit          [MORROW]",
+            "  SELECTED > TRACK     Night Geometry                           05:28   [MORROW]",
         ]
         .map(str::to_owned)
     );
@@ -140,7 +140,7 @@ fn service_playable_item_details_open_without_playback_and_restore_each_catalog_
             "  Sable Circuit",
             "  Source  Morrow Audio",
             "  Duration  05:28",
-            "  Status  Available",
+            "  Status  AVAILABLE",
             "  Enter opened details only. Nothing started playing.",
             " p play  Space pause  n queue",
             " a add  Esc back  ? help",
@@ -232,7 +232,7 @@ fn service_catalog_reuses_queue_feedback_for_every_playable_item_type() {
     application.handle_event(Event::Key(Key::Char('a')));
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot add: Stations are continuous and cannot be queued."
+        "              ERROR • Cannot add: Stations are continuous and cannot be queued."
     );
 
     for _ in 0..6 {
@@ -385,12 +385,12 @@ fn service_catalog_preserves_empty_and_unavailable_action_feedback() {
     );
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot play: Empty Room has no Tracks."
+        "              ERROR • Cannot play: Empty Room has no Tracks."
     );
     application.handle_event(Event::Key(Key::Char('a')));
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot add: Empty Room has no playable Tracks."
+        "              ERROR • Cannot add: Empty Room has no playable Tracks."
     );
 
     for _ in 0..8 {
@@ -411,7 +411,7 @@ fn service_catalog_preserves_empty_and_unavailable_action_feedback() {
         [0, 10, 11, 22, 23].map(|row| details[row].trim_end().to_owned()),
         [
             " SONGDIAL / BROWSE SERVICES / HARBOR SOUND / BLUEPRINT SKY",
-            "  Status  Unavailable",
+            "  Status  UNAVAIL",
             "  This recording is unavailable in the Demo catalog.",
             " p unavailable  Space pause  n queue",
             " a unavailable  Esc back  ? help",
@@ -424,11 +424,11 @@ fn service_catalog_preserves_empty_and_unavailable_action_feedback() {
     );
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot play: This recording is unavailable in the Demo catalog."
+        "              ERROR • Cannot play: This recording is unavailable in the Demo ca…"
     );
     application.handle_event(Event::Key(Key::Char('a')));
     assert_eq!(
         lines(&application.render())[21].trim_end(),
-        "              Cannot add: This recording is unavailable in the Demo catalog."
+        "              ERROR • Cannot add: This recording is unavailable in the Demo cat…"
     );
 }

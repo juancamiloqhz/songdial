@@ -144,10 +144,10 @@ fn search_case_folds_and_ranks_exact_then_prefix_then_other_matches_stably() {
         result_rows,
         [
             "  TRACKS • 4",
-            "  SELECTED > TRACK     Signal                                          [LOCAL]",
-            "             TRACK     Signal Garden                                   [LOCAL]",
-            "             TRACK     Midnight Signal                                 [LOCAL]",
-            "             TRACK     Beacon                                          [LOCAL]",
+            "  SELECTED > TRACK     Signal                                   01:00    [LOCAL]",
+            "             TRACK     Signal Garden                            01:00    [LOCAL]",
+            "             TRACK     Midnight Signal                          01:00    [LOCAL]",
+            "             TRACK     Beacon                                   01:00    [LOCAL]",
             "",
         ]
     );
@@ -164,13 +164,13 @@ fn search_groups_every_result_kind_in_order_and_omits_empty_groups() {
         [6, 7, 8, 9, 10, 11, 12, 13].map(|row| grouped[row].trim_end().to_owned()),
         [
             "  LISTENING INTENTS • 1",
-            "  SELECTED > INTENT    Signal Focus",
+            "  SELECTED > INTENT    Signal Focus                           CURATED [SONGDIAL]",
             "  STATIONS • 1",
-            "             STATION   Signal Radio                                    [LOCAL]",
+            "             STATION   Signal Radio                         AVAILABLE    [LOCAL]",
             "  PLAYLISTS • 1",
-            "             PLAYLIST  Signal Set                                      [LOCAL]",
+            "             PLAYLIST  Signal Set                           AVAILABLE    [LOCAL]",
             "  TRACKS • 1",
-            "             TRACK     Signal Tune                                     [LOCAL]",
+            "             TRACK     Signal Tune                              01:00    [LOCAL]",
         ]
         .map(str::to_owned)
     );
@@ -208,8 +208,8 @@ fn duplicate_tracks_keep_their_sources_and_open_without_playing_before_deliberat
         [6, 7, 8].map(|row| duplicate_results[row].trim_end().to_owned()),
         [
             "  TRACKS • 2",
-            "  SELECTED > TRACK     Night Geometry                                 [MORROW]",
-            "             TRACK     Night Geometry                                 [HARBOR]",
+            "  SELECTED > TRACK     Night Geometry                           05:28   [MORROW]",
+            "             TRACK     Night Geometry                           05:31   [HARBOR]",
         ]
         .map(str::to_owned)
     );

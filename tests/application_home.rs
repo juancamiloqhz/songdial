@@ -277,7 +277,7 @@ fn resize_events_update_the_viewport_without_resetting_selection() {
 }
 
 #[test]
-fn unsupported_viewport_is_safe_without_implementing_the_deferred_guard() {
+fn minimum_size_guard_remains_safe_in_a_one_cell_viewport() {
     let mut application = Application::new(Viewport::new(80, 24));
     application.handle_event(Event::Key(Key::Down));
 
@@ -292,6 +292,6 @@ fn unsupported_viewport_is_safe_without_implementing_the_deferred_guard() {
             lines(&rendered),
             quit,
         ),
-        (1, 1, vec![" ".to_owned()], songdial::Effect::Quit)
+        (1, 1, vec!["S".to_owned()], songdial::Effect::Quit)
     );
 }
