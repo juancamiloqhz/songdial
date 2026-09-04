@@ -224,6 +224,11 @@ fn playlist_advances_then_retains_and_restarts_its_final_stopped_track() {
 
     application.handle_event(Event::Tick);
     assert!(lines(&application.render())[20].contains("STOPPED • 00:01/00:01"));
+    assert_eq!(
+        application.handle_event(Event::Key(Key::Char('q'))),
+        Effect::Quit,
+        "a retained stopped Track with an empty Queue is not an active session"
+    );
 
     application.handle_event(Event::Key(Key::Char(' ')));
     assert!(lines(&application.render())[20].contains("PLAYING • 00:00/00:01"));

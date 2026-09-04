@@ -372,6 +372,10 @@ impl Queue {
         self.tracks.len()
     }
 
+    fn is_empty(&self) -> bool {
+        self.tracks.is_empty()
+    }
+
     fn get(&self, index: usize) -> Option<&CatalogId> {
         self.tracks.get(index)
     }
@@ -596,7 +600,15 @@ impl Application {
     }
 
     fn request_quit(&mut self) -> Effect {
-        if self.playback.is_some() {
+        let confirmation_required = match &self.playback {
+            Some(PlaybackSession::Station { .. }) => true,
+            Some(PlaybackSession::Track { queue, state, .. }) => {
+                *state != TrackPlaybackState::Stopped || !queue.is_empty()
+            }
+            None => false,
+        };
+
+        if confirmation_required {
             self.quit_confirmation = true;
             Effect::None
         } else {
