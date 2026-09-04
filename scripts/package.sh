@@ -25,4 +25,3 @@ mkdir -p "$output_directory"
 install -m 0755 "$binary" "$artifact"
 
 echo "$artifact"
-
