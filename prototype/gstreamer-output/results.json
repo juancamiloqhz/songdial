@@ -1,0 +1,1935 @@
+{
+  "runtime": "GStreamer 1.28.2",
+  "checks": {
+    "failed_preparation_preserves_A_and_queue": true,
+    "decoder_error_isolated": true,
+    "late_B_cannot_commit": true,
+    "late_B_never_reaches_output": true,
+    "ready_candidate_cancelled_before_output": true,
+    "canceled_candidate_never_reaches_output": true,
+    "finite_opening_preserved": true,
+    "finite_duration_preserved": true,
+    "finite_completion_reported_once_and_retained": true,
+    "true_live_no_preroll_decoded_before_commit": true,
+    "endless_http_reaches_output_without_EOS": true,
+    "explicit_stop_halts_output_after_bounded_tail": true,
+    "current_error_attributed_to_current_source": true,
+    "output_timestamps_strictly_increase": true,
+    "exactly_one_commit_per_selected_source": true,
+    "staging_python_buffer_bounded_for_fixtures": true
+  },
+  "events": [
+    {
+      "at": 0.0103,
+      "event": "runtime",
+      "version": "GStreamer 1.28.2",
+      "output": "fakesink; no audible playback"
+    },
+    {
+      "at": 0.0199,
+      "event": "source-created",
+      "name": "A",
+      "generation": 1,
+      "pause_return": "async"
+    },
+    {
+      "at": 0.054,
+      "event": "decoded-ready",
+      "name": "A",
+      "bytes": 4096,
+      "first": 1000
+    },
+    {
+      "at": 0.0541,
+      "event": "commit",
+      "generation": 1,
+      "session": {
+        "current": "A",
+        "queue": [
+          "queued-track"
+        ],
+        "state": "playing"
+      }
+    },
+    {
+      "at": 0.2404,
+      "event": "source-created",
+      "name": "HTTP-failure",
+      "generation": 2,
+      "pause_return": "async"
+    },
+    {
+      "at": 1.0014,
+      "event": "source-error",
+      "name": "HTTP-failure",
+      "reason": "controlled preparation failure"
+    },
+    {
+      "at": 1.0039,
+      "event": "source-closed",
+      "name": "HTTP-failure",
+      "elapsed_ms": 2.323
+    },
+    {
+      "at": 1.0087,
+      "event": "source-created",
+      "name": "decode-failure",
+      "generation": 3,
+      "pause_return": "async"
+    },
+    {
+      "at": 1.0395,
+      "event": "source-error",
+      "name": "decode-failure",
+      "reason": "The stream is of a different type than handled by this element."
+    },
+    {
+      "at": 1.0396,
+      "event": "source-error",
+      "name": "decode-failure",
+      "reason": "Internal data stream error."
+    },
+    {
+      "at": 1.0397,
+      "event": "source-error",
+      "name": "decode-failure",
+      "reason": "The stream is of a different type than handled by this element."
+    },
+    {
+      "at": 1.0405,
+      "event": "source-closed",
+      "name": "decode-failure",
+      "elapsed_ms": 0.755
+    },
+    {
+      "at": 1.0418,
+      "event": "source-created",
+      "name": "late-B",
+      "generation": 4,
+      "pause_return": "async"
+    },
+    {
+      "at": 1.0739,
+      "event": "source-created",
+      "name": "C",
+      "generation": 5,
+      "pause_return": "async"
+    },
+    {
+      "at": 1.1409,
+      "event": "decoded-ready",
+      "name": "C",
+      "bytes": 4096,
+      "first": 3000
+    },
+    {
+      "at": 1.141,
+      "event": "commit",
+      "generation": 5,
+      "session": {
+        "current": "C",
+        "queue": [],
+        "state": "playing"
+      }
+    },
+    {
+      "at": 1.143,
+      "event": "source-closed",
+      "name": "A",
+      "elapsed_ms": 1.963
+    },
+    {
+      "at": 1.4689,
+      "event": "decoded-ready",
+      "name": "late-B",
+      "bytes": 4096,
+      "first": 2000
+    },
+    {
+      "at": 1.469,
+      "event": "commit-rejected",
+      "name": "late-B",
+      "generation": 4
+    },
+    {
+      "at": 1.4705,
+      "event": "source-closed",
+      "name": "late-B",
+      "elapsed_ms": 1.426
+    },
+    {
+      "at": 1.4721,
+      "event": "source-created",
+      "name": "ready-canceled",
+      "generation": 6,
+      "pause_return": "async"
+    },
+    {
+      "at": 1.4938,
+      "event": "decoded-ready",
+      "name": "ready-canceled",
+      "bytes": 4096,
+      "first": 5000
+    },
+    {
+      "at": 1.4939,
+      "event": "cancel",
+      "name": "ready-canceled",
+      "generation": 7
+    },
+    {
+      "at": 1.4939,
+      "event": "commit-rejected",
+      "name": "ready-canceled",
+      "generation": 6
+    },
+    {
+      "at": 1.4948,
+      "event": "source-closed",
+      "name": "ready-canceled",
+      "elapsed_ms": 0.889
+    },
+    {
+      "at": 1.4959,
+      "event": "source-created",
+      "name": "finite",
+      "generation": 8,
+      "pause_return": "async"
+    },
+    {
+      "at": 1.5195,
+      "event": "decoded-ready",
+      "name": "finite",
+      "bytes": 4096,
+      "first": 6100
+    },
+    {
+      "at": 1.5196,
+      "event": "commit",
+      "generation": 8,
+      "session": {
+        "current": "finite",
+        "queue": [],
+        "state": "playing"
+      }
+    },
+    {
+      "at": 1.5203,
+      "event": "source-closed",
+      "name": "C",
+      "elapsed_ms": 0.704
+    },
+    {
+      "at": 1.7984,
+      "event": "source-eos",
+      "name": "finite"
+    },
+    {
+      "at": 1.9722,
+      "event": "current-drained",
+      "session": {
+        "current": "finite",
+        "queue": [],
+        "state": "stopped"
+      }
+    },
+    {
+      "at": 1.9751,
+      "event": "source-created",
+      "name": "true-live",
+      "generation": 9,
+      "pause_return": "no-preroll"
+    },
+    {
+      "at": 1.9807,
+      "event": "decoded-ready",
+      "name": "true-live",
+      "bytes": 320,
+      "first": 0
+    },
+    {
+      "at": 1.9808,
+      "event": "commit",
+      "generation": 9,
+      "session": {
+        "current": "true-live",
+        "queue": [],
+        "state": "playing"
+      }
+    },
+    {
+      "at": 1.9818,
+      "event": "source-closed",
+      "name": "finite",
+      "elapsed_ms": 0.929
+    },
+    {
+      "at": 1.9829,
+      "event": "source-created",
+      "name": "endless-http",
+      "generation": 10,
+      "pause_return": "async"
+    },
+    {
+      "at": 2.2467,
+      "event": "decoded-ready",
+      "name": "endless-http",
+      "bytes": 4096,
+      "first": 4000
+    },
+    {
+      "at": 2.2468,
+      "event": "commit",
+      "generation": 10,
+      "session": {
+        "current": "endless-http",
+        "queue": [],
+        "state": "playing"
+      }
+    },
+    {
+      "at": 2.2472,
+      "event": "source-closed",
+      "name": "true-live",
+      "elapsed_ms": 0.296
+    },
+    {
+      "at": 2.4683,
+      "event": "explicit-stop",
+      "session": {
+        "current": "endless-http",
+        "queue": [],
+        "state": "stopped"
+      }
+    },
+    {
+      "at": 2.4694,
+      "event": "source-closed",
+      "name": "endless-http",
+      "elapsed_ms": 1.011
+    },
+    {
+      "at": 2.5868,
+      "event": "source-created",
+      "name": "current-error",
+      "generation": 12,
+      "pause_return": "no-preroll"
+    },
+    {
+      "at": 2.5924,
+      "event": "decoded-ready",
+      "name": "current-error",
+      "bytes": 320,
+      "first": 0
+    },
+    {
+      "at": 2.5925,
+      "event": "commit",
+      "generation": 12,
+      "session": {
+        "current": "current-error",
+        "queue": [],
+        "state": "playing"
+      }
+    },
+    {
+      "at": 2.7678,
+      "event": "source-error",
+      "name": "current-error",
+      "reason": "Failed after iterations as requested."
+    },
+    {
+      "at": 2.768,
+      "event": "current-drained",
+      "session": {
+        "current": "current-error",
+        "queue": [],
+        "state": "stopped"
+      }
+    },
+    {
+      "at": 2.7681,
+      "event": "source-error",
+      "name": "current-error",
+      "reason": "Internal data stream error."
+    },
+    {
+      "at": 2.7683,
+      "event": "source-eos",
+      "name": "current-error"
+    },
+    {
+      "at": 2.7684,
+      "event": "current-error-observation",
+      "session": {
+        "current": "current-error",
+        "queue": [],
+        "state": "stopped"
+      },
+      "errors": [
+        "Failed after iterations as requested.",
+        "Internal data stream error."
+      ]
+    },
+    {
+      "at": 2.7684,
+      "event": "explicit-stop",
+      "session": {
+        "current": "current-error",
+        "queue": [],
+        "state": "stopped"
+      }
+    },
+    {
+      "at": 2.7688,
+      "event": "source-closed",
+      "name": "current-error",
+      "elapsed_ms": 0.327
+    },
+    {
+      "at": 2.7701,
+      "event": "source-created",
+      "name": "truncated",
+      "generation": 14,
+      "pause_return": "async"
+    },
+    {
+      "at": 2.7933,
+      "event": "decoded-ready",
+      "name": "truncated",
+      "bytes": 3200,
+      "first": 7000
+    },
+    {
+      "at": 2.7934,
+      "event": "commit",
+      "generation": 14,
+      "session": {
+        "current": "truncated",
+        "queue": [],
+        "state": "playing"
+      }
+    },
+    {
+      "at": 2.7935,
+      "event": "source-eos",
+      "name": "truncated"
+    },
+    {
+      "at": 2.9752,
+      "event": "current-drained",
+      "session": {
+        "current": "truncated",
+        "queue": [],
+        "state": "stopped"
+      }
+    },
+    {
+      "at": 2.98,
+      "event": "truncation-observation",
+      "messages": [
+        "eos"
+      ],
+      "errors": [],
+      "current": {
+        "current": "truncated",
+        "queue": [],
+        "state": "stopped"
+      }
+    },
+    {
+      "at": 2.9826,
+      "event": "source-closed",
+      "name": "truncated",
+      "elapsed_ms": 0.83
+    },
+    {
+      "at": 3.2724,
+      "event": "checks",
+      "checks": {
+        "failed_preparation_preserves_A_and_queue": true,
+        "decoder_error_isolated": true,
+        "late_B_cannot_commit": true,
+        "late_B_never_reaches_output": true,
+        "ready_candidate_cancelled_before_output": true,
+        "canceled_candidate_never_reaches_output": true,
+        "finite_opening_preserved": true,
+        "finite_duration_preserved": true,
+        "finite_completion_reported_once_and_retained": true,
+        "true_live_no_preroll_decoded_before_commit": true,
+        "endless_http_reaches_output_without_EOS": true,
+        "explicit_stop_halts_output_after_bounded_tail": true,
+        "current_error_attributed_to_current_source": true,
+        "output_timestamps_strictly_increase": true,
+        "exactly_one_commit_per_selected_source": true,
+        "staging_python_buffer_bounded_for_fixtures": true
+      },
+      "all_passed": true
+    }
+  ],
+  "output_buffers": [
+    {
+      "at": 0.057274854043498635,
+      "pts": 45910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.07604202791117132,
+      "pts": 65910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.09602357097901404,
+      "pts": 85910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.11610144097357988,
+      "pts": 105910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.13605554099194705,
+      "pts": 125910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.15604994702152908,
+      "pts": 145910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.17608784791082144,
+      "pts": 165910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.19608096592128277,
+      "pts": 185910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.21613374701701105,
+      "pts": 205910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.23608339810743928,
+      "pts": 225910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.2559779859147966,
+      "pts": 245910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.2764098639599979,
+      "pts": 265910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.2961721629835665,
+      "pts": 285910372,
+      "frames": 128,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.3120301130693406,
+      "pts": 301910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.332017291104421,
+      "pts": 321910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.35202836198732257,
+      "pts": 341910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.37206690409220755,
+      "pts": 361910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.39207606692798436,
+      "pts": 381910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.41206241003237665,
+      "pts": 401910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.4321353391278535,
+      "pts": 421910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.4520639299880713,
+      "pts": 441910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.47205474600195885,
+      "pts": 461910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.49244526913389564,
+      "pts": 481910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.5120309479534626,
+      "pts": 501910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.5320092970505357,
+      "pts": 521910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.5520084449090064,
+      "pts": 541910372,
+      "frames": 128,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.5680417539551854,
+      "pts": 557910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.5880336770787835,
+      "pts": 577910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.6080918780062348,
+      "pts": 597910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.6280794339254498,
+      "pts": 617910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.6480445039924234,
+      "pts": 637910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.6680404611397535,
+      "pts": 657910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.6880443079862744,
+      "pts": 677910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.7080235299654305,
+      "pts": 697910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.7280501099303365,
+      "pts": 717910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.7479567220434546,
+      "pts": 737910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.7680260350462049,
+      "pts": 757910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.78804144798778,
+      "pts": 777910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.8080479360651225,
+      "pts": 797910372,
+      "frames": 128,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.8240586430765688,
+      "pts": 813910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.8440911259967834,
+      "pts": 833910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.8640831930097193,
+      "pts": 853910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.8840569239109755,
+      "pts": 873910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.904068575007841,
+      "pts": 893910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.9240239860955626,
+      "pts": 913910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.9440176009666175,
+      "pts": 933910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.9659160301089287,
+      "pts": 953910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 0.9840448289178312,
+      "pts": 973910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.0040138810873032,
+      "pts": 993910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.0289601129479706,
+      "pts": 1013910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.0439827400259674,
+      "pts": 1033910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.0657949140295386,
+      "pts": 1053910372,
+      "frames": 128,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.0800413889810443,
+      "pts": 1069910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.1000124129932374,
+      "pts": 1089910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.1249013699125499,
+      "pts": 1109910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.1401414759457111,
+      "pts": 1129910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.1599935789126903,
+      "pts": 1149910372,
+      "frames": 160,
+      "generation": 1,
+      "values": [
+        1000
+      ],
+      "first": 1000
+    },
+    {
+      "at": 1.180011972086504,
+      "pts": 1169910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.2000741930678487,
+      "pts": 1189910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.2200412780512124,
+      "pts": 1209910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.2400397749152035,
+      "pts": 1229910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.2600698189344257,
+      "pts": 1249910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.280115642119199,
+      "pts": 1269910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.3001178200356662,
+      "pts": 1289910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.3200518330559134,
+      "pts": 1309910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.340381687041372,
+      "pts": 1329910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.3600481869652867,
+      "pts": 1349910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.3801052619237453,
+      "pts": 1369910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.40003882907331,
+      "pts": 1389910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.420009267050773,
+      "pts": 1409910372,
+      "frames": 128,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.4360057581216097,
+      "pts": 1425910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.4645975029561669,
+      "pts": 1445910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.4895167120266706,
+      "pts": 1465910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.4961586480494589,
+      "pts": 1485910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.5159948049113154,
+      "pts": 1505910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.536076304037124,
+      "pts": 1525910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.5560250440612435,
+      "pts": 1545910372,
+      "frames": 160,
+      "generation": 5,
+      "values": [
+        3000
+      ],
+      "first": 3000
+    },
+    {
+      "at": 1.5760487450752407,
+      "pts": 1565910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000,
+        6100
+      ],
+      "first": 6100
+    },
+    {
+      "at": 1.5960659990087152,
+      "pts": 1585910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.6160064029973,
+      "pts": 1605910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.636052325135097,
+      "pts": 1625910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.6560354030225426,
+      "pts": 1645910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.676001040963456,
+      "pts": 1665910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.6960498639382422,
+      "pts": 1685910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.7160704659763724,
+      "pts": 1705910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.735991379013285,
+      "pts": 1725910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.7561019060667604,
+      "pts": 1745910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.7760411000344902,
+      "pts": 1765910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.7960757699329406,
+      "pts": 1785910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.8160481580998749,
+      "pts": 1805910372,
+      "frames": 128,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.8320701781194657,
+      "pts": 1821910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.8520531000103801,
+      "pts": 1841910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.8720112489536405,
+      "pts": 1861910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.891997354105115,
+      "pts": 1881910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.9120100000873208,
+      "pts": 1901910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.932029902935028,
+      "pts": 1921910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.9519816020037979,
+      "pts": 1941910372,
+      "frames": 160,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.9720740909688175,
+      "pts": 1961910372,
+      "frames": 32,
+      "generation": 8,
+      "values": [
+        6000
+      ],
+      "first": 6000
+    },
+    {
+      "at": 1.9811516299378127,
+      "pts": 1971075384,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.0038957470096648,
+      "pts": 1993850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.0239336849190295,
+      "pts": 2013850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.0439632839988917,
+      "pts": 2033850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.0640068389475346,
+      "pts": 2053850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.083928100997582,
+      "pts": 2073850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.1039360880386084,
+      "pts": 2093850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.123919450910762,
+      "pts": 2113850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.1439221671316773,
+      "pts": 2133850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.164037154056132,
+      "pts": 2153850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.184031161945313,
+      "pts": 2173850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.203935795929283,
+      "pts": 2193850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.224018523003906,
+      "pts": 2213850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.243952756980434,
+      "pts": 2233850637,
+      "frames": 160,
+      "generation": 9,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.2639957880601287,
+      "pts": 2253850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.2840412899386138,
+      "pts": 2273850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.304094653110951,
+      "pts": 2293850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.3240678270813078,
+      "pts": 2313850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.3440443000290543,
+      "pts": 2333850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.3640024119522423,
+      "pts": 2353850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.3840153159108013,
+      "pts": 2373850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.4040320341009647,
+      "pts": 2393850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.4240550799295306,
+      "pts": 2413850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.4440684309229255,
+      "pts": 2433850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.463995953090489,
+      "pts": 2453850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.484067006036639,
+      "pts": 2473850637,
+      "frames": 160,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.5041048859711736,
+      "pts": 2493850637,
+      "frames": 128,
+      "generation": 10,
+      "values": [
+        4000
+      ],
+      "first": 4000
+    },
+    {
+      "at": 2.5939890809822828,
+      "pts": 2583844446,
+      "frames": 160,
+      "generation": 12,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.613943933043629,
+      "pts": 2603844446,
+      "frames": 160,
+      "generation": 12,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.6339578449260443,
+      "pts": 2623844446,
+      "frames": 160,
+      "generation": 12,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.654006670927629,
+      "pts": 2643844446,
+      "frames": 160,
+      "generation": 12,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.673946092138067,
+      "pts": 2663844446,
+      "frames": 160,
+      "generation": 12,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.693963970988989,
+      "pts": 2683844446,
+      "frames": 160,
+      "generation": 12,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.7139639609958977,
+      "pts": 2703844446,
+      "frames": 160,
+      "generation": 12,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.7339240161236376,
+      "pts": 2723844446,
+      "frames": 160,
+      "generation": 12,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.753939670044929,
+      "pts": 2743844446,
+      "frames": 160,
+      "generation": 12,
+      "values": [
+        0
+      ],
+      "first": 0
+    },
+    {
+      "at": 2.7947088631335646,
+      "pts": 2784636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    },
+    {
+      "at": 2.8147677599918097,
+      "pts": 2804636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    },
+    {
+      "at": 2.834883490111679,
+      "pts": 2824636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    },
+    {
+      "at": 2.8548060939647257,
+      "pts": 2844636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    },
+    {
+      "at": 2.8748344839550555,
+      "pts": 2864636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    },
+    {
+      "at": 2.894808226963505,
+      "pts": 2884636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    },
+    {
+      "at": 2.9148360299877822,
+      "pts": 2904636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    },
+    {
+      "at": 2.9347807199228555,
+      "pts": 2924636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    },
+    {
+      "at": 2.954853303031996,
+      "pts": 2944636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    },
+    {
+      "at": 2.9747670660726726,
+      "pts": 2964636798,
+      "frames": 160,
+      "generation": 14,
+      "values": [
+        7000
+      ],
+      "first": 7000
+    }
+  ],
+  "commits": [
+    "A",
+    "C",
+    "finite",
+    "true-live",
+    "endless-http",
+    "current-error",
+    "truncated"
+  ],
+  "source_max_python_buffer_bytes": {
+    "A": 4096,
+    "HTTP-failure": 0,
+    "decode-failure": 0,
+    "late-B": 4096,
+    "C": 4096,
+    "ready-canceled": 4096,
+    "finite": 4096,
+    "true-live": 320,
+    "endless-http": 4096,
+    "current-error": 320,
+    "truncated": 3200
+  }
+}
