@@ -161,9 +161,10 @@ application briefly attempts automatic reconnection, then stops with a retry
 action if recovery fails. Initial preparation has a 15-second deadline. Station
 recovery allows at most three attempts within 30 seconds, with 1- and 3-second
 delays between attempts; each attempt also respects the preparation deadline
-and remaining recovery window. Pause, stop, replacement success, and quit cancel
-recovery. Timeout constants may be refined with recorded implementation evidence
-without weakening bounded recovery or replacement guarantees.
+and remaining recovery window. Pause, entering a stopped state, replacement
+success, and quit cancel recovery. Timeout constants may be refined with recorded
+implementation evidence without weakening bounded recovery or replacement
+guarantees.
 
 Track pause retains position; retry restarts a failed Track from the beginning
 with its Queue intact. During a pending deliberate replacement, the previous
@@ -172,6 +173,22 @@ session and intervening Queue edits. Success invalidates its continuations and
 commits the new item and Queue together. Finite completion waits for output to
 drain; an error or materially incomplete recording retains the Track and Queue
 with retry. Rounded catalog durations alone must not cause false failures.
+
+If the next queued Track cannot load after the previous Track completes, it
+becomes the retained failed current Track. The remaining Queue stays intact;
+Retry attempts that failed Track from the beginning without skipping it.
+
+When playback is requested but output has run out of decoded audio, 15 seconds
+without more playable data triggers the existing Track failure or Station
+recovery behavior, even if the connection remains open without an error or end
+event. Decoded silence, deliberate pause, and normal completion do not count as
+stalls. A Station's recovery window starts when the stall is declared. The stall
+deadline may be tuned with recorded implementation evidence.
+
+Explicit Retry supersedes a pending replacement: if failed Track A is retained
+while B loads, retrying A cancels B and restarts A with A's Queue intact. B must
+not later become audible. Ordinary pause/resume continues to affect only the
+current session without canceling a pending replacement.
 
 The approved initial selection is six Kevin MacLeod recordings and Radio
 Paradise's Serenity and Mellow Mix Stations, documented in
@@ -197,6 +214,11 @@ those deterministic tests. Playback observations continue below the supported
 terminal size. Runtime and device errors are actionable, without silent Demo
 fallback; quitting restores the terminal and stops owned audio with bounded
 cleanup. Successful transitions need not be gapless.
+
+The product owner will run or arrange actual listening checks on Linux x86-64,
+macOS arm64, and macOS x86-64 when packages are ready. Required audible evidence
+remains an acceptance gate for the affected tickets; arranging the checks does
+not establish that they have passed.
 
 The human validation study remains deferred until a packaged build can play
 actual music and Stations. This sequencing does not satisfy Explore Songdial's
