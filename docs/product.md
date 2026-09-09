@@ -114,10 +114,95 @@ feel coherent without relying on a real Service to make the demo useful.
 
 ## Direction after the first milestone
 
-Once the interaction model is validated, the next milestone will introduce a
-small playback seam and connect one real playback adapter. CLIamp's current IPC
-capabilities are the leading candidate. Additional Services should be added
-only when their requirements demonstrate what genuinely varies.
+The next milestone will introduce a small playback seam and connect one real
+playback adapter. Its first useful build will play curated public Stations and
+a small catalog of real Tracks and Playlists without requiring accounts. The
+catalog entries must describe the actual audio and its Source. Normal browsing
+will show only real music; the fictional Demo catalog remains available for
+explicit demo or testing use.
+
+The initial selection emphasizes instrumental music for focus, calm, and gentle
+energy. Finite Tracks load on demand over the network; their catalog metadata
+and attribution ship with the application, while the recordings do not.
+
+The real catalog's Home destination is named **Playlists**, reflecting its
+curated listening sequences rather than implying a personal library.
+**Browse sources** replaces Browse services and groups the real music by its
+actual Source. The historical Explore Songdial model above retains its original
+labels.
+
+Real playback must work on all three existing packaged targets before the
+milestone is complete: Linux x86-64, macOS arm64, and macOS x86-64. A successful
+prototype on one platform does not satisfy that requirement.
+Downloaded packages will include the required GStreamer runtime and plugins;
+Listeners will not need to install GStreamer separately.
+
+The replacement guarantees remain required: existing playback continues while
+a replacement loads, failure preserves the existing Playback session and
+Queue, and a superseded request must not later become audible. The application
+commits the replacement item and Queue together after successful preparation.
+
+The 2026-09-09 [CLIamp research](research/cliamp-playback-adapter.md) found that
+its released headless behavior does not uphold those guarantees. Following
+[alternative research](research/real-playback-adapter-alternatives.md) and the
+[controlled-output prototype](handoffs/prototype-gstreamer-output.md), GStreamer
+is selected for the first real playback adapter. The adapter will control when
+prepared candidate audio reaches the output. Real audio, supported codecs,
+and installed builds on all three targets remain implementation acceptance
+requirements. See [the adapter decision](adr/0003-use-gstreamer-for-real-playback.md).
+Additional Services should be added only when their requirements demonstrate
+what genuinely varies.
+
+Resuming a paused Station reconnects to the live broadcast. If a current Track
+fails after starting, playback stops while retaining the Track and Queue, and
+the application shows an error with a retry action. It does not automatically
+skip that failed Track. If an already-playing Station disconnects, the
+application briefly attempts automatic reconnection, then stops with a retry
+action if recovery fails. Initial preparation has a 15-second deadline. Station
+recovery allows at most three attempts within 30 seconds, with 1- and 3-second
+delays between attempts; each attempt also respects the preparation deadline
+and remaining recovery window. Pause, stop, replacement success, and quit cancel
+recovery. Timeout constants may be refined with recorded implementation evidence
+without weakening bounded recovery or replacement guarantees.
+
+Track pause retains position; retry restarts a failed Track from the beginning
+with its Queue intact. During a pending deliberate replacement, the previous
+session continues normal Queue progression. Failure preserves that progressed
+session and intervening Queue edits. Success invalidates its continuations and
+commits the new item and Queue together. Finite completion waits for output to
+drain; an error or materially incomplete recording retains the Track and Queue
+with retry. Rounded catalog durations alone must not cause false failures.
+
+The approved initial selection is six Kevin MacLeod recordings and Radio
+Paradise's Serenity and Mellow Mix Stations, documented in
+[catalog research](research/initial-real-catalog.md). The Stations are not
+promised to be instrumental-only. Songdial curates these ordered Playlists:
+
+- **Focus:** Airport Lounge, Wholesome, Dream Culture.
+- **Calm:** Music for Manatees, Water Prelude, Dream Culture.
+- **Gentle energy:** Carefree, Airport Lounge, Wholesome.
+
+Track details expose the artist, source link, and license credit; bundled credits
+remain available offline. Source browsing groups recordings under Incompetech /
+Kevin MacLeod and Stations under Radio Paradise. Playlist details distinguish
+Songdial curation from recording provenance. Selection remains subject to actual
+listening and decoding validation, especially Water Prelude's calm fit.
+
+The Application owns navigation, the current item, Queue, and automatic
+progression. A small playback interface hides decoding, controlled output,
+network lifecycle, and cleanup. Most behavioral tests use the existing
+Application event/effect boundary; focused adapter tests verify captured audio
+and local HTTP failures. Packaged audible checks on all three targets complement
+those deterministic tests. Playback observations continue below the supported
+terminal size. Runtime and device errors are actionable, without silent Demo
+fallback; quitting restores the terminal and stops owned audio with bounded
+cleanup. Successful transitions need not be gapless.
+
+The human validation study remains deferred until a packaged build can play
+actual music and Stations. This sequencing does not satisfy Explore Songdial's
+human-validation gate: [issue #11](https://github.com/juancamiloqhz/songdial/issues/11)
+remains open, and [draft PR #22](https://github.com/juancamiloqhz/songdial/pull/22)
+preserves its preparation. No participant observations or verdict are claimed.
 
 The standalone application comes first. Omarchy integration should package and
 surface a working Songdial experience rather than define its architecture.
